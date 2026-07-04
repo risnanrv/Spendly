@@ -1,11 +1,14 @@
-import { defineConfig } from "drizzle-kit";
-import "dotenv/config";
+import type { Config } from 'drizzle-kit';
 
-export default defineConfig({
-  schema: "./src/database/schema.ts",
-  out: "./src/database/migrations",
-  dialect: "sqlite",
+const url = process.env.DATABASE_URL || 'file:spendly.db';
+const isRemote = url.startsWith('libsql://') || url.startsWith('https://') || url.startsWith('http://');
+
+export default {
+  schema: './src/database/schema.ts',
+  out: './src/database/migrations',
+  dialect: isRemote ? 'turso' : 'sqlite',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url,
+    authToken: process.env.DATABASE_AUTH_TOKEN,
   },
-});
+} satisfies Config;
