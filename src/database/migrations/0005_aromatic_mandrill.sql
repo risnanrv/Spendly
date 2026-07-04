@@ -9,7 +9,7 @@ CREATE TABLE `__new_settings` (
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_settings`("user_id", "key", "value", "created_at", "updated_at") SELECT "user_id", "key", "value", "created_at", "updated_at" FROM `settings`;--> statement-breakpoint
+INSERT INTO `__new_settings`("user_id", "key", "value", "created_at", "updated_at") SELECT 'system' AS "user_id", "key", "value", "created_at", "updated_at" FROM `settings`;--> statement-breakpoint
 DROP TABLE `settings`;--> statement-breakpoint
 ALTER TABLE `__new_settings` RENAME TO `settings`;--> statement-breakpoint
 PRAGMA foreign_keys=ON;--> statement-breakpoint
@@ -23,7 +23,7 @@ CREATE TABLE `__new_user_preferences` (
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_user_preferences`("user_id", "key", "value", "created_at", "updated_at") SELECT "user_id", "key", "value", "created_at", "updated_at" FROM `user_preferences`;--> statement-breakpoint
+INSERT INTO `__new_user_preferences`("user_id", "key", "value", "created_at", "updated_at") SELECT 'system' AS "user_id", "key", "value", "created_at", "updated_at" FROM `user_preferences`;--> statement-breakpoint
 DROP TABLE `user_preferences`;--> statement-breakpoint
 ALTER TABLE `__new_user_preferences` RENAME TO `user_preferences`;--> statement-breakpoint
 ALTER TABLE `categories` ADD `user_id` text REFERENCES user(id);--> statement-breakpoint
