@@ -2,6 +2,27 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from './db';
 import * as schema from '../database/schema';
+import { MigrationRunner } from '@/database/migrator';
+
+// 1. Production environment validation diagnostics
+if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
+  if (!process.env.BETTER_AUTH_SECRET) {
+    // eslint-disable-next-line no-console
+    console.error('CRITICAL ENVIRONMENT ERROR: BETTER_AUTH_SECRET is not configured! Authentication signing will fail in production.');
+  }
+  if (!process.env.BETTER_AUTH_URL && !process.env.NEXT_PUBLIC_APP_URL) {
+    // eslint-disable-next-line no-console
+    console.warn('Production warning: BETTER_AUTH_URL is not set. Better Auth will try to infer context URLs.');
+  }
+}
+
+// 2. Run migrations once on initialization in server context
+if (typeof window === 'undefined') {
+  MigrationRunner.run().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('Database auto-migration failed on server initialization:', err);
+  });
+}
 
 const getBaseURL = () => {
   let url = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
