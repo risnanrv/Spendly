@@ -1,0 +1,5 @@
+ALTER TABLE sync_queue ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sync_queue ADD COLUMN synced_at INTEGER;
+ALTER TABLE sync_queue ADD COLUMN last_attempt INTEGER;
+ALTER TABLE sync_queue ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal';
+ALTER TABLE sync_queue ADD COLUMN operation_version INTEGER NOT NULL DEFAULT 1;
