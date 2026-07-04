@@ -39,6 +39,8 @@ module.exports = [
       '**/.expo/**',
       '**/dist/**',
       '**/build/**',
+      '**/server/**',
+      '**/legacy/**',
       'babel.config.js',
       'metro.config.js',
       'tailwind.config.js',
