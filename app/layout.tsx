@@ -1,13 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { AppProviders } from '@/providers/AppProviders';
 import { ToastContainer } from '@/components/ui/ToastContainer';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-sans',
-});
 
 export const metadata: Metadata = {
   title: 'Spendly',
@@ -38,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable}`}>
+    <html lang="en">
       <body className="min-h-screen bg-bg-secondary text-text-primary antialiased font-sans">
         <AppProviders>
           {children}

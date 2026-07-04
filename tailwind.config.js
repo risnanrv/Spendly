@@ -91,7 +91,7 @@ module.exports = {
         '3xl': '32px',
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "Inter", "sans-serif"],
+        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],
       },
       keyframes: {
         "accordion-down": {
