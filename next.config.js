@@ -8,6 +8,10 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ['@libsql/client'],
+  outputFileTracingIncludes: {
+    '/api/**/*': ['./src/database/migrations/**/*'],
+  },
 };
 
 module.exports = withPWA(nextConfig);
