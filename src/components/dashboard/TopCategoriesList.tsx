@@ -23,7 +23,7 @@ export function TopCategoriesList({ topCategories }: TopCategoriesListProps) {
   return (
     <div className="mb-6 flex flex-col">
       <h2 className="text-sm font-bold text-[#111111] uppercase tracking-wider mb-3">
-        Where Money is Going
+        Top Categories
       </h2>
       <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm">
         {topCategories.length === 0 ? (

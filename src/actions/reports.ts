@@ -20,6 +20,7 @@ export interface ReportsFilter {
   preset: 'today' | 'last7days' | 'thisMonth' | 'thisYear' | 'lifetime' | 'custom';
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
+  monthStr?: string; // YYYY-MM — used when preset is 'thisMonth' to specify which month
 }
 
 export async function getReportsAction(filter: ReportsFilter) {
@@ -56,12 +57,16 @@ export async function getReportsAction(filter: ReportsFilter) {
       prevEndDateObj = new Date(startDateObj.getTime() - 1);
     } else if (filter.preset === 'thisMonth') {
       isMonthComparison = true;
-      const [year, month] = currentMonthStr.split('-').map(Number);
+      // Use the user-selected monthStr if provided, otherwise fall back to current month
+      const targetMonthStr = filter.monthStr || currentMonthStr;
+      const [year, month] = targetMonthStr.split('-').map(Number);
       startDateObj = new Date(year, month - 1, 1, 0, 0, 0, 0);
       endDateObj = new Date(year, month, 0, 23, 59, 59, 999);
 
       const prev = new Date(year, month - 2, 1);
       prevMonthStr = getMonthStr(prev);
+      // Store targetMonthStr so report fetch below uses the right month
+      Object.assign(filter, { _resolvedMonthStr: targetMonthStr });
     } else if (filter.preset === 'thisYear') {
       startDateObj = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
       endDateObj = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
@@ -101,10 +106,11 @@ export async function getReportsAction(filter: ReportsFilter) {
     let monthCompareData = null;
 
     if (isMonthComparison) {
-      // Use ReportService monthly methods
-      reportData = await reportService.getMonthlyReport(userId, currentMonthStr);
+      // Use ReportService monthly methods — use user-selected month, not necessarily the current month
+      const resolvedMonthStr = (filter as any)._resolvedMonthStr || filter.monthStr || currentMonthStr;
+      reportData = await reportService.getMonthlyReport(userId, resolvedMonthStr);
       try {
-        monthCompareData = await reportService.compareMonths(userId, currentMonthStr, prevMonthStr);
+        monthCompareData = await reportService.compareMonths(userId, resolvedMonthStr, prevMonthStr);
         prevReportData = monthCompareData.previous;
       } catch (err) {
         logger.warn('Failed to resolve previous month comparison:', err);

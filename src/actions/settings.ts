@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { expenses, categories, monthlyBudgets } from '@/database/schema';
 import { eq, and } from 'drizzle-orm';
 import { logger } from '@/utils/logger';
+import { CategoryRepository } from '@/database/repositories/CategoryRepository';
 
 async function verifySession() {
   const session = await auth.api.getSession({
@@ -110,6 +111,8 @@ export async function truncateCategoriesAction() {
         )
       );
     });
+    // Clear in-memory cache so categories reload fresh
+    CategoryRepository.clearCache(userId);
     return { success: true };
   } catch (error: any) {
     logger.error('truncateCategoriesAction failed:', error);
@@ -126,6 +129,8 @@ export async function resetDatabaseAction() {
       await tx.delete(monthlyBudgets).where(eq(monthlyBudgets.userId, userId));
       await tx.delete(categories).where(eq(categories.userId, userId));
     });
+    // Clear in-memory cache so categories reload fresh
+    CategoryRepository.clearCache(userId);
     return { success: true };
   } catch (error: any) {
     logger.error('resetDatabaseAction failed:', error);

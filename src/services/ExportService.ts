@@ -17,6 +17,7 @@ export class ExportService {
     if (!userId) {
       throw new Error('User ID is required.');
     }
+    const isLifetime = monthStr === 'lifetime';
     logger.info(`ExportService: Compiling CSV report for ${monthStr} for user ${userId}...`);
 
     try {
@@ -39,7 +40,9 @@ export class ExportService {
         )
         .orderBy(desc(schema.expenses.date));
 
-      const filtered = expenses.filter((e) => getMonthStr(new Date(e.date)) === monthStr);
+      const filtered = isLifetime
+        ? expenses
+        : expenses.filter((e) => getMonthStr(new Date(e.date)) === monthStr);
       
       let csvContent = 'Date,Title,Category,Amount,Note\n';
       
@@ -68,7 +71,9 @@ export class ExportService {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    logger.info(`ExportService: Generating HTML statement for ${monthStr} for user ${userId}...`);
+    const isLifetime = monthStr === 'lifetime';
+    const periodLabel = isLifetime ? 'All Time' : monthStr;
+    logger.info(`ExportService: Generating HTML statement for ${periodLabel} for user ${userId}...`);
 
     try {
       const expenses = await db
@@ -90,7 +95,9 @@ export class ExportService {
         )
         .orderBy(desc(schema.expenses.date));
 
-      const filtered = expenses.filter((e) => getMonthStr(new Date(e.date)) === monthStr);
+      const filtered = isLifetime
+        ? expenses
+        : expenses.filter((e) => getMonthStr(new Date(e.date)) === monthStr);
       
       const totalCents = filtered.reduce((sum, item) => sum + item.amount, 0);
       const totalAmountStr = `₹${(totalCents / 100).toFixed(2)}`;
@@ -113,7 +120,7 @@ export class ExportService {
         <html>
         <head>
           <meta charset="utf-8">
-          <title>Spendly Financial Statement - ${monthStr}</title>
+          <title>Spendly Financial Statement - ${periodLabel}</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -216,7 +223,7 @@ export class ExportService {
           </div>
           <div class="header">
             <h1 class="title">Spendly Financial Summary</h1>
-            <p class="subtitle">Statement Period: ${monthStr} &nbsp;|&nbsp; Generated on: ${new Date().toLocaleDateString()}</p>
+            <p class="subtitle">Statement Period: ${periodLabel} &nbsp;|&nbsp; Generated on: ${new Date().toLocaleDateString()}</p>
           </div>
 
           <div class="grid">

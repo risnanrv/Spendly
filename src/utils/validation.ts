@@ -97,6 +97,21 @@ export const profileSchema = z.object({
   name: nameSchema,
 });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, 'Please confirm your new password'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: 'New password must be different from current password',
+    path: ['newPassword'],
+  });
+
 // ─── Inferred Types ───────────────────────────────────────────────────────
 export type EmailInput = z.infer<typeof emailSchema>;
 export type PasswordInput = z.infer<typeof passwordSchema>;
@@ -112,6 +127,7 @@ export type ExpenseInput = z.infer<typeof expenseSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type BudgetInput = z.infer<typeof budgetSchema>;
 export type ProfileInput = z.infer<typeof profileSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 /**
  * Custom lightweight zod resolver for react-hook-form

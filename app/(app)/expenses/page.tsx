@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useExpenses, useDeleteExpense } from '@/hooks/useExpenses';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { expenseSchema, type ExpenseInput } from '@/utils/validation';
+import { useExpenses, useCreateExpense, useDeleteExpense } from '@/hooks/useExpenses';
 import { useCategories } from '@/hooks/useCategories';
 import { getMonthStr, getMonthName } from '@/utils/date';
 import { formatAmount } from '@/utils/currency';
@@ -26,6 +29,7 @@ import {
 export default function ExpensesPage() {
   const { data: categories } = useCategories();
   const deleteMutation = useDeleteExpense();
+  const createMutation = useCreateExpense();
 
   // Filters State
   const [monthStr, setMonthStr] = useState<string>(getMonthStr(new Date()));
@@ -36,8 +40,8 @@ export default function ExpensesPage() {
   const [sortField, setSortField] = useState<'date' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Modal State
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  // Modal State for EDITING
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [expenseToEdit, setExpenseToEdit] = useState<any | null>(null);
   const [expenseToDeleteId, setExpenseToDeleteId] = useState<string | null>(null);
 
@@ -48,14 +52,82 @@ export default function ExpensesPage() {
     search: search || undefined,
   });
 
-  const handleEdit = (expense: any) => {
-    setExpenseToEdit(expense);
-    setIsFormOpen(true);
+  // Query ALL expenses to calculate recency of categories
+  const { data: allExpenses } = useExpenses();
+
+  // Calculate sorted categories by recency of use
+  const sortedCategories = useMemo(() => {
+    if (!categories) return [];
+    if (!allExpenses || allExpenses.length === 0) return categories;
+
+    const recencyMap: Record<string, number> = {};
+    allExpenses.forEach((exp: any) => {
+      const time = new Date(exp.date).getTime();
+      if (!recencyMap[exp.categoryId] || time > recencyMap[exp.categoryId]) {
+        recencyMap[exp.categoryId] = time;
+      }
+    });
+
+    return [...categories].sort((a: any, b: any) => {
+      const timeA = recencyMap[a.id] || 0;
+      const timeB = recencyMap[b.id] || 0;
+      if (timeA !== timeB) {
+        return timeB - timeA;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories, allExpenses]);
+
+  // Form for INLINE ADD
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors: formErrors, isSubmitting: formSubmitting },
+  } = useForm<ExpenseInput>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: {
+      title: '',
+      amount: undefined,
+      categoryId: '',
+      dateStr: new Date().toISOString().split('T')[0],
+      note: '',
+    },
+  });
+
+  // Set default category when categories list loads
+  useEffect(() => {
+    if (sortedCategories.length > 0) {
+      setValue('categoryId', sortedCategories[0].id);
+    }
+  }, [sortedCategories, setValue]);
+
+  const onAddExpense = async (data: ExpenseInput) => {
+    const amountCents = Math.round(data.amount * 100);
+    try {
+      await createMutation.mutateAsync({
+        title: data.title,
+        amount: amountCents,
+        categoryId: data.categoryId,
+        dateStr: data.dateStr,
+        note: data.note || undefined,
+      });
+      reset({
+        title: '',
+        amount: undefined,
+        categoryId: sortedCategories.length > 0 ? sortedCategories[0].id : '',
+        dateStr: new Date().toISOString().split('T')[0],
+        note: '',
+      });
+    } catch {
+      // Errors handled inside mutation hook
+    }
   };
 
-  const handleAdd = () => {
-    setExpenseToEdit(null);
-    setIsFormOpen(true);
+  const handleEdit = (expense: any) => {
+    setExpenseToEdit(expense);
+    setIsEditOpen(true);
   };
 
   const handleDeleteClick = (id: string, event?: React.MouseEvent) => {
@@ -108,28 +180,140 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6 select-none pb-12">
-      {/* Header section (Desktop only, mobile uses FAB and page title) */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#111111]">
-            Expenses
-          </h1>
-          <p className="text-xs text-[#707070] mt-1">
-            Track and manage your daily spending records.
-          </p>
-        </div>
-        <button
-          onClick={handleAdd}
-          className="hidden md:flex px-4 py-2.5 bg-black hover:bg-black/90 transition-all rounded-lg font-semibold text-sm text-white items-center gap-1.5 active:scale-[0.98]"
-        >
-          <Plus className="h-4.5 w-4.5" />
-          Add Expense
-        </button>
+      {/* Header section */}
+      <div>
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#111111]">
+          Expenses
+        </h1>
+        <p className="text-xs text-[#707070] mt-1">
+          Log spending records and view history instantly.
+        </p>
       </div>
 
-      {/* 1. Month Filter */}
-      <div className="flex items-center gap-3">
-        <div className="relative min-w-[200px]">
+      {/* Inline Expense Form */}
+      <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm space-y-4">
+        <h2 className="text-xs font-bold text-[#111111] uppercase tracking-wider">
+          Log New Expense
+        </h2>
+        <form onSubmit={handleSubmit(onAddExpense)} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Title */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-[#707070] uppercase">Title</label>
+              <input
+                type="text"
+                placeholder="e.g. Grocery"
+                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black transition-colors"
+                {...register('title')}
+                disabled={formSubmitting}
+              />
+              {formErrors.title && (
+                <p className="text-[10px] text-red-500 font-medium">{formErrors.title.message}</p>
+              )}
+            </div>
+
+            {/* Amount */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-[#707070] uppercase">Amount (INR)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black transition-colors"
+                {...register('amount')}
+                disabled={formSubmitting}
+              />
+              {formErrors.amount && (
+                <p className="text-[10px] text-red-500 font-medium">{formErrors.amount.message}</p>
+              )}
+            </div>
+
+            {/* Category dropdown */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-[#707070] uppercase">Category</label>
+              <select
+                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] focus:outline-none focus:border-black transition-colors cursor-pointer"
+                {...register('categoryId')}
+                disabled={formSubmitting}
+              >
+                <option value="" disabled>Select category</option>
+                {sortedCategories.map((cat: any) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              {formErrors.categoryId && (
+                <p className="text-[10px] text-red-500 font-medium">{formErrors.categoryId.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Date */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-[#707070] uppercase">Date</label>
+              <input
+                type="date"
+                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] focus:outline-none focus:border-black transition-colors"
+                {...register('dateStr')}
+                disabled={formSubmitting}
+              />
+              {formErrors.dateStr && (
+                <p className="text-[10px] text-red-500 font-medium">{formErrors.dateStr.message}</p>
+              )}
+            </div>
+
+            {/* Note */}
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] font-bold text-[#707070] uppercase">Note (Optional)</label>
+              <input
+                type="text"
+                placeholder="Add notes..."
+                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black transition-colors"
+                {...register('note')}
+                disabled={formSubmitting}
+              />
+              {formErrors.note && (
+                <p className="text-[10px] text-red-500 font-medium">{formErrors.note.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={formSubmitting}
+              className="px-4 py-2 bg-black hover:bg-black/90 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {formSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  Log Expense
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-[#EAEAEA] my-4" />
+
+      {/* History section heading */}
+      <div>
+        <h2 className="text-base font-extrabold text-[#111111]">Expense History</h2>
+      </div>
+
+      {/* Filters: Month & Search */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        {/* Month Filter */}
+        <div className="relative min-w-[200px] w-full sm:w-auto">
           <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070]" />
           <select
             value={monthStr}
@@ -144,25 +328,24 @@ export default function ExpensesPage() {
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070] pointer-events-none" />
         </div>
+
+        {/* Search Bar */}
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070]" />
+          <input
+            type="text"
+            placeholder="Search transactions..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-sm text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors"
+          />
+        </div>
       </div>
 
-      {/* 2. Search Bar */}
-      <div className="relative w-full max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070]" />
-        <input
-          type="text"
-          placeholder="Search transactions..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-sm text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors"
-        />
-      </div>
-
-      {/* 3. Category Chips (Horizontal Scrollable list) */}
+      {/* Category Chips (Horizontal Scrollable list) */}
       <div className="space-y-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-[#707070]">Categories</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-[#707070]">Filter Categories</span>
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none scroll-smooth">
-          {/* "All" chip */}
           <button
             onClick={() => setCategoryId('')}
             className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 border ${
@@ -190,7 +373,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* 4. List / History Table */}
+      {/* History table list */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-[#707070] gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-black" />
@@ -203,21 +386,14 @@ export default function ExpensesPage() {
           <p className="text-xs text-[#707070]">{error?.message || 'Unexpected database error'}</p>
         </div>
       ) : sortedExpenses.length === 0 ? (
-        /* Empty state */
         <div className="bg-[#F7F7F7] border border-[#EAEAEA] rounded-2xl p-10 flex flex-col items-center justify-center text-center shadow-sm">
           <div className="w-16 h-16 rounded-full bg-[#EAEAEA] flex items-center justify-center text-[#707070] mb-4">
             <FolderMinus className="h-8 w-8" />
           </div>
           <h3 className="text-lg font-bold text-[#111111]">No records found</h3>
-          <p className="text-sm text-[#707070] max-w-sm mt-1 mb-6">
+          <p className="text-sm text-[#707070] max-w-sm mt-1">
             We couldn&apos;t find any logged expenses matching those filter criteria for {getMonthName(monthStr)}.
           </p>
-          <button
-            onClick={handleAdd}
-            className="px-5 py-2.5 bg-black hover:bg-black/90 transition-all rounded-lg font-semibold text-sm text-white shadow-sm active:scale-[0.98]"
-          >
-            Log New Expense
-          </button>
         </div>
       ) : (
         <>
@@ -340,22 +516,14 @@ export default function ExpensesPage() {
         </>
       )}
 
-      {/* 5. Floating Action Button (FAB) for mobile viewports */}
-      <button
-        onClick={handleAdd}
-        className="fixed right-6 bottom-20 w-14 h-14 rounded-full bg-black hover:bg-black/90 text-white flex items-center justify-center shadow-lg active:scale-90 transition-all z-40"
-        aria-label="Add Expense"
-      >
-        <Plus className="h-6 w-6 text-white" />
-      </button>
-
-      {/* Modals Containers */}
+      {/* Edit Dialog Modal Container */}
       <ExpenseDialog
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
         expenseToEdit={expenseToEdit}
       />
 
+      {/* Delete Confirmation Modal */}
       <DeleteConfirmDialog
         isOpen={!!expenseToDeleteId}
         onClose={() => setExpenseToDeleteId(null)}

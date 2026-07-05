@@ -31,7 +31,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-[#F7F7F7] border-r border-[#EAEAEA] flex flex-col justify-between h-screen fixed top-0 left-0 z-30 select-none">
+    <aside className="hidden lg:flex w-64 bg-[#F7F7F7] border-r border-[#EAEAEA] flex-col justify-between h-screen fixed top-0 left-0 z-30 select-none">
       <div className="flex flex-col">
         {/* Header / Brand Logo */}
         <div className="h-16 flex items-center gap-3 px-6 border-b border-[#EAEAEA]">

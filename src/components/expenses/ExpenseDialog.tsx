@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { expenseSchema, type ExpenseInput } from '@/utils/validation';
 import { useCategories } from '@/hooks/useCategories';
-import { useCreateExpense, useUpdateExpense } from '@/hooks/useExpenses';
+import { useCreateExpense, useUpdateExpense, useExpenses } from '@/hooks/useExpenses';
 import { Loader2, X } from 'lucide-react';
 
 interface ExpenseDialogProps {
@@ -23,10 +23,34 @@ interface ExpenseDialogProps {
 
 export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogProps) {
   const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const { data: expenses } = useExpenses();
   const createMutation = useCreateExpense();
   const updateMutation = useUpdateExpense();
 
   const isEdit = !!expenseToEdit;
+
+  // Sort categories by recency of use
+  const sortedCategories = useMemo(() => {
+    if (!categories) return [];
+    if (!expenses || expenses.length === 0) return categories;
+
+    const recencyMap: Record<string, number> = {};
+    expenses.forEach((exp: any) => {
+      const time = new Date(exp.date).getTime();
+      if (!recencyMap[exp.categoryId] || time > recencyMap[exp.categoryId]) {
+        recencyMap[exp.categoryId] = time;
+      }
+    });
+
+    return [...categories].sort((a: any, b: any) => {
+      const timeA = recencyMap[a.id] || 0;
+      const timeB = recencyMap[b.id] || 0;
+      if (timeA !== timeB) {
+        return timeB - timeA;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories, expenses]);
 
   const {
     register,
@@ -58,13 +82,13 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
         reset({
           title: '',
           amount: undefined,
-          categoryId: categories && categories.length > 0 ? categories[0].id : '',
+          categoryId: sortedCategories.length > 0 ? sortedCategories[0].id : '',
           dateStr: new Date().toISOString().split('T')[0],
           note: '',
         });
       }
     }
-  }, [isOpen, expenseToEdit, setValue, reset, categories]);
+  }, [isOpen, expenseToEdit, setValue, reset, sortedCategories]);
 
   const onSubmit = async (data: ExpenseInput) => {
     const amountCents = Math.round(data.amount * 100);
@@ -184,7 +208,7 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
               disabled={isSubmitting || categoriesLoading}
             >
               <option value="" disabled className="bg-white text-[#111111]">Select a category</option>
-              {categories?.map((cat: any) => (
+              {sortedCategories.map((cat: any) => (
                 <option key={cat.id} value={cat.id} className="bg-white text-[#111111]">
                   {cat.name}
                 </option>

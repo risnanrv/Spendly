@@ -23,7 +23,7 @@ export default function BackupsSettingsPage() {
     'expenses' | 'budgets' | 'categories' | 'reset' | 'restore' | null
   >(null);
   const [restorePayload, setRestorePayload] = useState<any>(null);
-  const [exportMonth, setExportMonth] = useState<string>(getMonthStr(new Date()));
+  const [exportMonth, setExportMonth] = useState<string>('lifetime');
 
   const truncateExpenses = useTruncateExpenses();
   const truncateBudgets = useTruncateBudgets();
@@ -102,7 +102,9 @@ export default function BackupsSettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Spendly_Report_${exportMonth}.csv`;
+    a.download = exportMonth === 'lifetime'
+      ? `Spendly_Report_AllTime_${new Date().toISOString().split('T')[0]}.csv`
+      : `Spendly_Report_${exportMonth}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -121,7 +123,9 @@ export default function BackupsSettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Spendly_Statement_${exportMonth}.html`;
+    a.download = exportMonth === 'lifetime'
+      ? `Spendly_Statement_AllTime_${new Date().toISOString().split('T')[0]}.html`
+      : `Spendly_Statement_${exportMonth}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -211,6 +215,7 @@ export default function BackupsSettingsPage() {
             onChange={(e) => setExportMonth(e.target.value)}
             className="w-full px-3 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs font-bold text-[#111111] focus:outline-none focus:border-black transition-colors"
           >
+            <option value="lifetime">All Time (Lifetime)</option>
             {monthOptions.map((opt: { value: string; label: string }) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}

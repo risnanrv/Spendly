@@ -10,7 +10,6 @@ import {
   PiggyBank,
   FolderOpen,
   Database,
-  Info,
   ChevronRight,
   LogOut,
   Loader2,
@@ -183,19 +182,6 @@ export default function SettingsIndexPage() {
                 <Database className="h-4 w-4" />
               </div>
               <span className="text-sm font-bold text-[#111111]">Backups & Statements</span>
-            </div>
-            <ChevronRight className="h-4 w-4 text-[#707070]" />
-          </Link>
-
-          <Link
-            href="/settings/about"
-            className="w-full flex items-center justify-between p-4 hover:bg-[#F7F7F7] transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center">
-                <Info className="h-4 w-4" />
-              </div>
-              <span className="text-sm font-bold text-[#111111]">About Spendly</span>
             </div>
             <ChevronRight className="h-4 w-4 text-[#707070]" />
           </Link>
