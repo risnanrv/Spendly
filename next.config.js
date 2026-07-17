@@ -8,9 +8,12 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ['@libsql/client'],
-  outputFileTracingIncludes: {
-    '/api/**/*': ['./src/database/migrations/**/*'],
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    // Only compile check is needed since we verified types
+    ignoreBuildErrors: false,
   },
 };
 

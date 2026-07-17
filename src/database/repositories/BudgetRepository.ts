@@ -1,7 +1,11 @@
-import crypto from 'crypto';
-import { db } from '../../lib/db';
-import { monthlyBudgets } from '../schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import { logger } from '@/utils/logger';
 import type { IBudgetRepository } from './interfaces';
 import type { MonthlyBudget } from '@/models/domain';
@@ -17,26 +21,21 @@ export class BudgetRepository implements IBudgetRepository {
       throw new Error('Invalid month format. Expected YYYY-MM.');
     }
 
-    const budgets = await db
-      .select()
-      .from(monthlyBudgets)
-      .where(
-        and(
-          eq(monthlyBudgets.userId, userId),
-          eq(monthlyBudgets.month, monthStr),
-          isNull(monthlyBudgets.deletedAt)
-        )
-      )
-      .limit(1);
+    const docId = `${userId}_${monthStr}`;
+    const docRef = doc(db, 'budgets', docId);
+    const snap = await getDoc(docRef);
 
-    if (budgets.length === 0) return null;
+    if (!snap.exists()) return null;
+    const data = snap.data();
+
+    if (data.deletedAt) return null;
 
     return {
-      id: budgets[0].id,
-      month: budgets[0].month,
-      amount: budgets[0].amount,
-      createdAt: budgets[0].createdAt,
-      updatedAt: budgets[0].updatedAt,
+      id: docId,
+      month: data.month,
+      amount: data.amount,
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
     };
   }
 
@@ -46,110 +45,70 @@ export class BudgetRepository implements IBudgetRepository {
     amount: number,
     tx?: any
   ): Promise<MonthlyBudget> {
-    const runInTx = async (executor: any) => {
-      if (!validateMonthFormat(monthStr)) {
-        throw new Error('Invalid month format. Expected YYYY-MM.');
-      }
-      if (amount < 0) {
-        throw new Error('Budget amount cannot be negative.');
-      }
+    if (!validateMonthFormat(monthStr)) {
+      throw new Error('Invalid month format. Expected YYYY-MM.');
+    }
+    if (amount < 0) {
+      throw new Error('Budget amount cannot be negative.');
+    }
 
-      const now = new Date();
-      logger.debug(`BudgetRepository: Setting budget for month ${monthStr} for user ${userId}`);
+    const docId = `${userId}_${monthStr}`;
+    const docRef = doc(db, 'budgets', docId);
+    const snap = await getDoc(docRef);
+    const now = new Date();
 
-      const existing = await executor
-        .select()
-        .from(monthlyBudgets)
-        .where(
-          and(
-            eq(monthlyBudgets.userId, userId),
-            eq(monthlyBudgets.month, monthStr),
-            isNull(monthlyBudgets.deletedAt)
-          )
-        )
-        .limit(1);
+    logger.debug(`BudgetRepository: Setting budget for month ${monthStr} inside Firestore for user ${userId}`);
 
-      let budgetResult: MonthlyBudget;
+    if (snap.exists()) {
+      await updateDoc(docRef, {
+        amount,
+        updatedAt: Timestamp.fromDate(now),
+        deletedAt: null,
+      });
 
-      if (existing.length > 0) {
-        const record = existing[0];
-        await executor
-          .update(monthlyBudgets)
-          .set({
-            amount: amount,
-            updatedAt: now,
-          })
-          .where(eq(monthlyBudgets.id, record.id));
-        
-        budgetResult = {
-          id: record.id,
-          month: monthStr,
-          amount: amount,
-          createdAt: record.createdAt,
-          updatedAt: now,
-        };
-      } else {
-        const id = crypto.randomUUID();
-        const insertValues = {
-          id,
-          userId,
-          month: monthStr,
-          amount: amount,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-        };
+      const oldData = snap.data();
+      return {
+        id: docId,
+        month: monthStr,
+        amount,
+        createdAt: oldData.createdAt instanceof Timestamp ? oldData.createdAt.toDate() : new Date(oldData.createdAt),
+        updatedAt: now,
+      };
+    } else {
+      const budgetData = {
+        id: docId,
+        userId,
+        month: monthStr,
+        amount,
+        createdAt: Timestamp.fromDate(now),
+        updatedAt: Timestamp.fromDate(now),
+        deletedAt: null,
+      };
 
-        await executor.insert(monthlyBudgets).values(insertValues);
+      await setDoc(docRef, budgetData);
 
-        budgetResult = {
-          id,
-          month: monthStr,
-          amount: amount,
-          createdAt: now,
-          updatedAt: now,
-        };
-      }
-
-      return budgetResult;
-    };
-
-    return tx ? await runInTx(tx) : await db.transaction(async (innerTx) => runInTx(innerTx));
+      return {
+        id: docId,
+        month: monthStr,
+        amount,
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
   }
 
   public async deleteBudget(userId: string, monthStr: string, tx?: any): Promise<void> {
-    const runInTx = async (executor: any) => {
-      if (!validateMonthFormat(monthStr)) {
-        throw new Error('Invalid month format. Expected YYYY-MM.');
-      }
+    if (!validateMonthFormat(monthStr)) {
+      throw new Error('Invalid month format. Expected YYYY-MM.');
+    }
 
-      logger.debug(`BudgetRepository: Soft-deleting budget for month ${monthStr} for user ${userId}`);
-      const now = new Date();
+    logger.debug(`BudgetRepository: Soft-deleting budget for month ${monthStr} inside Firestore for user ${userId}`);
+    const docId = `${userId}_${monthStr}`;
+    const docRef = doc(db, 'budgets', docId);
 
-      const existing = await executor
-        .select()
-        .from(monthlyBudgets)
-        .where(
-          and(
-            eq(monthlyBudgets.userId, userId),
-            eq(monthlyBudgets.month, monthStr),
-            isNull(monthlyBudgets.deletedAt)
-          )
-        )
-        .limit(1);
-
-      if (existing.length > 0) {
-        const record = existing[0];
-        await executor
-          .update(monthlyBudgets)
-          .set({
-            deletedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(monthlyBudgets.id, record.id));
-      }
-    };
-
-    tx ? await runInTx(tx) : await db.transaction(async (innerTx) => runInTx(innerTx));
+    await updateDoc(docRef, {
+      deletedAt: Timestamp.fromDate(new Date()),
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
   }
 }

@@ -34,6 +34,7 @@
   body {
     @apply bg-bg-secondary text-text-primary antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-color: #FFFFFF;
   }
 }
 
@@ -43,13 +44,6 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(229, 227, 243, 0.6);
-}
-
-.dark .glass {
-  background: rgba(18, 15, 42, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(196, 192, 230, 0.1);
 }
 
 /* Page animations & smooth transitions */

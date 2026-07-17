@@ -1,6 +1,5 @@
-import { db } from '@/lib/db';
-import * as schema from '@/database/schema';
-import { eq, and, desc, isNull } from 'drizzle-orm';
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { db } from '@/firebase/config';
 import { logger } from '@/utils/logger';
 
 const getMonthStr = (date: Date): string => {
@@ -21,38 +20,51 @@ export class ExportService {
     logger.info(`ExportService: Compiling CSV report for ${monthStr} for user ${userId}...`);
 
     try {
-      const expenses = await db
-        .select({
-          id: schema.expenses.id,
-          amount: schema.expenses.amount,
-          title: schema.expenses.title,
-          note: schema.expenses.note,
-          date: schema.expenses.date,
-          categoryName: schema.categories.name,
-        })
-        .from(schema.expenses)
-        .leftJoin(schema.categories, eq(schema.expenses.categoryId, schema.categories.id))
-        .where(
-          and(
-            eq(schema.expenses.userId, userId),
-            isNull(schema.expenses.deletedAt)
-          )
-        )
-        .orderBy(desc(schema.expenses.date));
+      // Query Categories to map categoryId -> Name
+      const catQuery = query(collection(db, 'categories'), where('userId', '==', userId));
+      const catSnap = await getDocs(catQuery);
+      const categoryMap = new Map<string, string>();
+      catSnap.forEach((d) => {
+        categoryMap.set(d.id, d.data().name);
+      });
+
+      // Query active expenses
+      const expensesQuery = query(
+        collection(db, 'expenses'),
+        where('userId', '==', userId),
+        orderBy('date', 'desc')
+      );
+      const snap = await getDocs(expensesQuery);
+      const list: any[] = [];
+
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data.deletedAt) return;
+        const dateObj = data.date?.toDate ? data.date.toDate() : new Date(data.date);
+        
+        list.push({
+          id: d.id,
+          amount: data.amount,
+          title: data.title,
+          note: data.note,
+          date: dateObj,
+          categoryName: categoryMap.get(data.categoryId) || 'Uncategorized',
+        });
+      });
 
       const filtered = isLifetime
-        ? expenses
-        : expenses.filter((e) => getMonthStr(new Date(e.date)) === monthStr);
-      
+        ? list
+        : list.filter((e) => getMonthStr(e.date) === monthStr);
+
       let csvContent = 'Date,Title,Category,Amount,Note\n';
-      
+
       filtered.forEach((e) => {
-        const dateStr = new Date(e.date).toISOString().split('T')[0];
+        const dateStr = e.date.toISOString().split('T')[0];
         const title = this.escapeCSV(e.title);
-        const category = this.escapeCSV(e.categoryName || 'Uncategorized');
+        const category = this.escapeCSV(e.categoryName);
         const amount = (e.amount / 100).toFixed(2);
         const note = this.escapeCSV(e.note || '');
-        
+
         csvContent += `${dateStr},${title},${category},${amount},${note}\n`;
       });
 
@@ -76,29 +88,42 @@ export class ExportService {
     logger.info(`ExportService: Generating HTML statement for ${periodLabel} for user ${userId}...`);
 
     try {
-      const expenses = await db
-        .select({
-          id: schema.expenses.id,
-          amount: schema.expenses.amount,
-          title: schema.expenses.title,
-          note: schema.expenses.note,
-          date: schema.expenses.date,
-          categoryName: schema.categories.name,
-        })
-        .from(schema.expenses)
-        .leftJoin(schema.categories, eq(schema.expenses.categoryId, schema.categories.id))
-        .where(
-          and(
-            eq(schema.expenses.userId, userId),
-            isNull(schema.expenses.deletedAt)
-          )
-        )
-        .orderBy(desc(schema.expenses.date));
+      // Query Categories to map categoryId -> Name
+      const catQuery = query(collection(db, 'categories'), where('userId', '==', userId));
+      const catSnap = await getDocs(catQuery);
+      const categoryMap = new Map<string, string>();
+      catSnap.forEach((d) => {
+        categoryMap.set(d.id, d.data().name);
+      });
+
+      // Query active expenses
+      const expensesQuery = query(
+        collection(db, 'expenses'),
+        where('userId', '==', userId),
+        orderBy('date', 'desc')
+      );
+      const snap = await getDocs(expensesQuery);
+      const list: any[] = [];
+
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data.deletedAt) return;
+        const dateObj = data.date?.toDate ? data.date.toDate() : new Date(data.date);
+
+        list.push({
+          id: d.id,
+          amount: data.amount,
+          title: data.title,
+          note: data.note,
+          date: dateObj,
+          categoryName: categoryMap.get(data.categoryId) || 'Uncategorized',
+        });
+      });
 
       const filtered = isLifetime
-        ? expenses
-        : expenses.filter((e) => getMonthStr(new Date(e.date)) === monthStr);
-      
+        ? list
+        : list.filter((e) => getMonthStr(e.date) === monthStr);
+
       const totalCents = filtered.reduce((sum, item) => sum + item.amount, 0);
       const totalAmountStr = `₹${(totalCents / 100).toFixed(2)}`;
       const avgCents = filtered.length > 0 ? Math.round(totalCents / filtered.length) : 0;
@@ -106,7 +131,7 @@ export class ExportService {
 
       const catMap = new Map<string, { name: string; amount: number; count: number }>();
       filtered.forEach((e) => {
-        const catName = e.categoryName || 'Uncategorized';
+        const catName = e.categoryName;
         const existing = catMap.get(catName) || { name: catName, amount: 0, count: 0 };
         existing.amount += e.amount;
         existing.count += 1;
@@ -252,10 +277,11 @@ export class ExportService {
               </tr>
             </thead>
             <tbody>
-              ${categoriesBreakdown.map((c) => {
-                const ratio = ((c.amount / totalCents) * 100).toFixed(1);
-                const amountStr = `₹${(c.amount / 100).toFixed(2)}`;
-                return `
+              ${categoriesBreakdown
+                .map((c) => {
+                  const ratio = ((c.amount / totalCents) * 100).toFixed(1);
+                  const amountStr = `₹${(c.amount / 100).toFixed(2)}`;
+                  return `
                   <tr>
                     <td><strong>${c.name}</strong></td>
                     <td>${c.count} transaction${c.count === 1 ? '' : 's'}</td>
@@ -263,7 +289,8 @@ export class ExportService {
                     <td class="text-right">${ratio}%</td>
                   </tr>
                 `;
-              }).join('')}
+                })
+                .join('')}
             </tbody>
           </table>
 
@@ -279,23 +306,24 @@ export class ExportService {
               </tr>
             </thead>
             <tbody>
-              ${filtered.map((e) => {
-                const dateStr = new Date(e.date).toLocaleDateString();
-                const amountStr = `₹${(e.amount / 100).toFixed(2)}`;
-                return `
+              ${filtered
+                .map((e) => {
+                  const dateStr = e.date.toLocaleDateString();
+                  const amountStr = `₹${(e.amount / 100).toFixed(2)}`;
+                  return `
                   <tr>
                     <td>${dateStr}</td>
                     <td><strong>${e.title}</strong></td>
-                    <td><span class="badge">${e.categoryName || 'Uncategorized'}</span></td>
+                    <td><span class="badge">${e.categoryName}</span></td>
                     <td>${e.note || '-'}</td>
                     <td class="text-right" style="color: #111111; font-weight: 500;">${amountStr}</td>
                   </tr>
                 `;
-              }).join('')}
+                })
+                .join('')}
             </tbody>
           </table>
           <script>
-            // Auto trigger print in printable layouts
             window.onload = function() {
               if (window.location.search.includes('print=true')) {
                 window.print();

@@ -4,27 +4,44 @@ const { PNG } = require('pngjs');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
-// 1. Grid definition for bold letter "S" (16x16 pixels)
-const S_GRID = [
-  "................",
-  "................",
-  "....11111111....",
-  "...1111111111...",
-  "...11......11...",
-  "...11...........",
-  "...11111111.....",
-  "....111111111...",
-  "..........1111..",
-  "............11..",
-  "...11.......11..",
-  "...11......111..",
-  "...1111111111...",
-  "....11111111....",
-  "................",
-  "................"
-];
+// Geometric Monochrome SVG Logo
+const SVG_CONTENT = `<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Base premium black rounded square -->
+  <rect width="512" height="512" rx="128" fill="#111111"/>
+  <!-- Abstract geometric ribbon representing financial flow / letter "S" -->
+  <path d="M 192,128 H 384 V 192 H 288 L 192,288 V 384 H 128 V 320 H 224 L 320,224 V 128 Z" fill="#FFFFFF"/>
+</svg>`;
 
-// Helper to write PNG of specific size
+// Helper function to check if coordinate (nx, ny) in 512x512 canvas is inside the geometric logo
+function isInsideLogoRibbon(nx, ny) {
+  // 1. Top horizontal bar
+  if (ny >= 128 && ny <= 192 && nx >= 192 && nx <= 384) {
+    return true;
+  }
+  // 2. Bottom horizontal bar
+  if (ny >= 320 && ny <= 384 && nx >= 128 && nx <= 320) {
+    return true;
+  }
+  // 3. Right vertical block
+  if (nx >= 320 && nx <= 384 && ny >= 128 && ny <= 224) {
+    return true;
+  }
+  // 4. Left vertical block
+  if (nx >= 128 && nx <= 192 && ny >= 288 && ny <= 384) {
+    return true;
+  }
+  // 5. Diagonal ribbon strip
+  if (nx >= 192 && nx <= 320 && ny >= 192 && ny <= 320) {
+    const sum = nx + ny;
+    if (sum >= 480 && sum <= 544) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Generate pixel-perfect PNG with math rendering
 function generatePNG(filename, size) {
   const png = new PNG({ width: size, height: size });
 
@@ -32,22 +49,22 @@ function generatePNG(filename, size) {
     for (let x = 0; x < size; x++) {
       const idx = (size * y + x) << 2;
 
-      // Map pixel to 16x16 grid coordinate
-      const gridX = Math.floor((x / size) * 16);
-      const gridY = Math.floor((y / size) * 16);
+      // Scale coordinates to 512x512 model
+      const nx = (x / size) * 512;
+      const ny = (y / size) * 512;
 
-      const isWhite = S_GRID[gridY] && S_GRID[gridY][gridX] === '1';
+      const isWhite = isInsideLogoRibbon(nx, ny);
 
       if (isWhite) {
-        png.data[idx] = 255;     // Red
-        png.data[idx + 1] = 255; // Green
-        png.data[idx + 2] = 255; // Blue
-        png.data[idx + 3] = 255; // Alpha
+        png.data[idx] = 255;     // R
+        png.data[idx + 1] = 255; // G
+        png.data[idx + 2] = 255; // B
+        png.data[idx + 3] = 255; // A
       } else {
-        png.data[idx] = 17;      // Red
-        png.data[idx + 1] = 17;  // Green
-        png.data[idx + 2] = 17;  // Blue
-        png.data[idx + 3] = 255; // Alpha
+        png.data[idx] = 17;      // R (0x11)
+        png.data[idx + 1] = 17;  // G (0x11)
+        png.data[idx + 2] = 17;  // B (0x11)
+        png.data[idx + 3] = 255; // A
       }
     }
   }
@@ -56,13 +73,6 @@ function generatePNG(filename, size) {
   png.pack().pipe(fs.createWriteStream(outputPath));
   console.log(`Generated PNG: ${filename} (${size}x${size})`);
 }
-
-// 2. SVG Logo definitions
-const SVG_CONTENT = `<?xml version="1.0" encoding="utf-8"?>
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <rect width="512" height="512" fill="#111111"/>
-  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="310" fill="#FFFFFF">S</text>
-</svg>`;
 
 function main() {
   console.log('Generating Spendly PWA graphics assets...');

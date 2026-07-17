@@ -1,87 +1,124 @@
-import crypto from 'crypto';
-import { db } from '../../lib/db';
-import { categories, expenses } from '../schema';
-import { eq, isNull, and, or } from 'drizzle-orm';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  setDoc,
+  updateDoc,
+  writeBatch,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import { logger } from '@/utils/logger';
 import type { ICategoryRepository, CategoryInsert, CategoryUpdate } from './interfaces';
 import type { Category } from '@/models/domain';
 
-export class CategoryRepository implements ICategoryRepository {
-  private static cache: Map<string, Category[]> = new Map();
+const DEFAULT_CATEGORIES = [
+  { name: 'Food', icon: 'utensils', color: 'orange', type: 'expense' },
+  { name: 'Transport', icon: 'car', color: 'blue', type: 'expense' },
+  { name: 'Shopping', icon: 'shopping-bag', color: 'purple', type: 'expense' },
+  { name: 'Bills', icon: 'receipt', color: 'red', type: 'expense' },
+  { name: 'Entertainment', icon: 'film', color: 'pink', type: 'expense' },
+  { name: 'Healthcare', icon: 'heart-pulse', color: 'emerald', type: 'expense' },
+  { name: 'Education', icon: 'graduation-cap', color: 'violet', type: 'expense' },
+  { name: 'Travel', icon: 'plane', color: 'cyan', type: 'expense' },
+  { name: 'Subscriptions', icon: 'credit-card', color: 'amber', type: 'expense' },
+  { name: 'Other', icon: 'grid', color: 'slate', type: 'expense' },
+  { name: 'Salary', icon: 'briefcase', color: 'green', type: 'income' },
+];
 
+export function mapDocToCategory(docSnap: any): Category {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    name: data.name,
+    icon: data.icon,
+    color: data.color,
+    type: data.type as 'expense' | 'income',
+    isSystem: Boolean(data.isSystem),
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
+    deletedAt: data.deletedAt instanceof Timestamp ? data.deletedAt.toDate() : null,
+  };
+}
+
+export class CategoryRepository implements ICategoryRepository {
   public static clearCache(userId?: string): void {
-    if (userId) {
-      CategoryRepository.cache.delete(userId);
-    } else {
-      CategoryRepository.cache.clear();
+    // Left for interface signature compatibility.
+  }
+
+  private async seedUserCategories(userId: string): Promise<Category[]> {
+    logger.debug(`CategoryRepository: Seeding default categories for user ${userId}`);
+    const batch = writeBatch(db);
+    const now = new Date();
+    const seededCategories: Category[] = [];
+
+    for (const cat of DEFAULT_CATEGORIES) {
+      const docRef = doc(collection(db, 'categories'));
+      const categoryData = {
+        id: docRef.id,
+        userId,
+        name: cat.name,
+        icon: cat.icon,
+        color: cat.color,
+        type: cat.type,
+        isSystem: true,
+        createdAt: Timestamp.fromDate(now),
+        updatedAt: Timestamp.fromDate(now),
+        deletedAt: null,
+      };
+
+      batch.set(docRef, categoryData);
+      
+      seededCategories.push({
+        id: categoryData.id,
+        name: categoryData.name,
+        icon: categoryData.icon,
+        color: categoryData.color,
+        type: categoryData.type as 'expense' | 'income',
+        isSystem: true,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      });
     }
+
+    await batch.commit();
+    return seededCategories;
   }
 
   public async getCategories(userId: string): Promise<Category[]> {
-    const cached = CategoryRepository.cache.get(userId);
-    if (cached) {
-      logger.debug(`CategoryRepository: Resolving categories from cache for user ${userId}`);
-      return cached;
+    const q = query(
+      collection(db, 'categories'),
+      where('userId', '==', userId)
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      // Lazy seed on first read if empty
+      return this.seedUserCategories(userId);
     }
 
-    const results = await db
-      .select()
-      .from(categories)
-      .where(
-        and(
-          isNull(categories.deletedAt),
-          or(
-            eq(categories.userId, userId),
-            isNull(categories.userId)
-          )
-        )
-      );
+    const results: Category[] = [];
+    snap.forEach((docSnap) => {
+      const cat = mapDocToCategory(docSnap);
+      if (!cat.deletedAt) {
+        results.push(cat);
+      }
+    });
 
-    const mapped = results.map((row) => ({
-      id: row.id,
-      name: row.name,
-      icon: row.icon,
-      color: row.color,
-      type: row.type as 'expense' | 'income',
-      isSystem: Boolean(row.isSystem),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      deletedAt: row.deletedAt,
-    }));
-
-    CategoryRepository.cache.set(userId, mapped);
-    return mapped;
+    return results;
   }
 
   public async getCategoryById(userId: string, id: string): Promise<Category | null> {
-    const results = await db
-      .select()
-      .from(categories)
-      .where(
-        and(
-          eq(categories.id, id),
-          or(
-            eq(categories.userId, userId),
-            isNull(categories.userId)
-          )
-        )
-      )
-      .limit(1);
-
-    if (results.length === 0) return null;
-    const row = results[0];
-
-    return {
-      id: row.id,
-      name: row.name,
-      icon: row.icon,
-      color: row.color,
-      type: row.type as 'expense' | 'income',
-      isSystem: Boolean(row.isSystem),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      deletedAt: row.deletedAt,
-    };
+    const docRef = doc(db, 'categories', id);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    if (data?.userId !== userId) return null;
+    return mapDocToCategory(snap);
   }
 
   public async createCategory(
@@ -89,44 +126,36 @@ export class CategoryRepository implements ICategoryRepository {
     data: CategoryInsert,
     tx?: any
   ): Promise<Category> {
-    const runInTx = async (executor: any) => {
-      const id = crypto.randomUUID();
-      const now = new Date();
+    logger.debug(`CategoryRepository: Creating custom category inside Firestore for user ${userId}`);
+    const docRef = doc(collection(db, 'categories'));
+    const now = new Date();
 
-      const insertValues = {
-        id,
-        userId,
-        name: data.name.trim(),
-        icon: data.icon.trim(),
-        color: data.color.trim(),
-        type: data.type,
-        isSystem: false,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      };
-
-      logger.debug(`CategoryRepository: Creating category ${id} for user ${userId}`);
-      await executor.insert(categories).values(insertValues);
-
-      const createdCategory: Category = {
-        id: insertValues.id,
-        name: insertValues.name,
-        icon: insertValues.icon,
-        color: insertValues.color,
-        type: insertValues.type as 'expense' | 'income',
-        isSystem: false,
-        createdAt: insertValues.createdAt,
-        updatedAt: insertValues.updatedAt,
-        deletedAt: null,
-      };
-
-      return createdCategory;
+    const insertValues = {
+      id: docRef.id,
+      userId,
+      name: data.name.trim(),
+      icon: data.icon.trim(),
+      color: data.color.trim(),
+      type: data.type,
+      isSystem: false,
+      createdAt: Timestamp.fromDate(now),
+      updatedAt: Timestamp.fromDate(now),
+      deletedAt: null,
     };
 
-    const result = tx ? await runInTx(tx) : await db.transaction(async (innerTx) => runInTx(innerTx));
-    CategoryRepository.clearCache(userId);
-    return result;
+    await setDoc(docRef, insertValues);
+
+    return {
+      id: insertValues.id,
+      name: insertValues.name,
+      icon: insertValues.icon,
+      color: insertValues.color,
+      type: insertValues.type as 'expense' | 'income',
+      isSystem: false,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
   }
 
   public async updateCategory(
@@ -135,67 +164,35 @@ export class CategoryRepository implements ICategoryRepository {
     data: CategoryUpdate,
     tx?: any
   ): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      const updateValues: Record<string, any> = {
-        updatedAt: now,
-      };
-      if (data.name !== undefined) updateValues.name = data.name.trim();
-      if (data.icon !== undefined) updateValues.icon = data.icon.trim();
-      if (data.color !== undefined) updateValues.color = data.color.trim();
-
-      logger.debug(`CategoryRepository: Updating category ${id} for user ${userId}`);
-      await executor
-        .update(categories)
-        .set(updateValues)
-        .where(
-          and(
-            eq(categories.id, id),
-            eq(categories.userId, userId)
-          )
-        );
+    logger.debug(`CategoryRepository: Updating category ${id} inside Firestore for user ${userId}`);
+    const docRef = doc(db, 'categories', id);
+    const updateValues: Record<string, any> = {
+      updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    await (tx ? runInTx(tx) : db.transaction(async (innerTx) => runInTx(innerTx)));
-    CategoryRepository.clearCache(userId);
+    if (data.name !== undefined) updateValues.name = data.name.trim();
+    if (data.icon !== undefined) updateValues.icon = data.icon.trim();
+    if (data.color !== undefined) updateValues.color = data.color.trim();
+
+    await updateDoc(docRef, updateValues);
   }
 
   public async deleteCategory(userId: string, id: string, tx?: any): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      logger.debug(`CategoryRepository: Soft-deleting category ${id} for user ${userId}`);
-      await executor
-        .update(categories)
-        .set({ deletedAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(categories.id, id),
-            eq(categories.userId, userId)
-          )
-        );
-    };
-
-    await (tx ? runInTx(tx) : db.transaction(async (innerTx) => runInTx(innerTx)));
-    CategoryRepository.clearCache(userId);
+    logger.debug(`CategoryRepository: Soft-deleting category ${id} inside Firestore for user ${userId}`);
+    const docRef = doc(db, 'categories', id);
+    await updateDoc(docRef, {
+      deletedAt: Timestamp.fromDate(new Date()),
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
   }
 
   public async restoreCategory(userId: string, id: string, tx?: any): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      logger.debug(`CategoryRepository: Restoring category ${id} for user ${userId}`);
-      await executor
-        .update(categories)
-        .set({ deletedAt: null, updatedAt: now })
-        .where(
-          and(
-            eq(categories.id, id),
-            eq(categories.userId, userId)
-          )
-        );
-    };
-
-    await (tx ? runInTx(tx) : db.transaction(async (innerTx) => runInTx(innerTx)));
-    CategoryRepository.clearCache(userId);
+    logger.debug(`CategoryRepository: Restoring category ${id} inside Firestore for user ${userId}`);
+    const docRef = doc(db, 'categories', id);
+    await updateDoc(docRef, {
+      deletedAt: null,
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
   }
 
   public async reassignExpenses(
@@ -204,18 +201,28 @@ export class CategoryRepository implements ICategoryRepository {
     targetCategoryId: string,
     tx?: any
   ): Promise<void> {
-    const executor = tx || db;
-    logger.debug(`CategoryRepository: Reassigning expenses from ${sourceCategoryId} to ${targetCategoryId} for user ${userId}`);
+    logger.debug(
+      `CategoryRepository: Reassigning expenses in Firestore from ${sourceCategoryId} to ${targetCategoryId} for user ${userId}`
+    );
 
-    await executor
-      .update(expenses)
-      .set({ categoryId: targetCategoryId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(expenses.userId, userId),
-          eq(expenses.categoryId, sourceCategoryId),
-          isNull(expenses.deletedAt)
-        )
-      );
+    const q = query(
+      collection(db, 'expenses'),
+      where('userId', '==', userId),
+      where('categoryId', '==', sourceCategoryId)
+    );
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+
+    snap.forEach((docSnap) => {
+      const expenseData = docSnap.data();
+      if (!expenseData.deletedAt) {
+        batch.update(docSnap.ref, {
+          categoryId: targetCategoryId,
+          updatedAt: Timestamp.fromDate(new Date()),
+        });
+      }
+    });
+
+    await batch.commit();
   }
 }

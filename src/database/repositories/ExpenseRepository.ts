@@ -1,10 +1,36 @@
-import crypto from 'crypto';
-import { db } from '../../lib/db';
-import { expenses, categories } from '../schema';
-import { eq, and, isNull, desc, like, between, sql } from 'drizzle-orm';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  setDoc,
+  updateDoc,
+  orderBy,
+  limit,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import { logger } from '@/utils/logger';
 import type { IExpenseRepository, ExpenseInsert, ExpenseUpdate } from './interfaces';
 import type { Expense } from '@/models/domain';
+
+// Helper to convert Firestore document to domain Expense model
+export function mapDocToExpense(docSnap: any): Expense {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    amount: data.amount,
+    categoryId: data.categoryId,
+    title: data.title,
+    note: data.note || null,
+    date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date),
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
+    deletedAt: data.deletedAt instanceof Timestamp ? data.deletedAt.toDate() : null,
+  };
+}
 
 export class ExpenseRepository implements IExpenseRepository {
   public async createExpense(
@@ -12,40 +38,36 @@ export class ExpenseRepository implements IExpenseRepository {
     data: ExpenseInsert,
     tx?: any
   ): Promise<Expense> {
-    const runInTx = async (executor: any) => {
-      const id = crypto.randomUUID();
-      const now = new Date();
+    logger.debug(`ExpenseRepository: Saving expense in Firestore for user ${userId}`);
+    const docRef = doc(collection(db, 'expenses'));
+    const now = new Date();
 
-      const insertValues = {
-        id,
-        userId,
-        amount: data.amount,
-        categoryId: data.categoryId,
-        title: data.title,
-        note: data.note || null,
-        date: data.date,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      };
-
-      logger.debug(`ExpenseRepository: Saving expense ${id} for user ${userId}`);
-      await executor.insert(expenses).values(insertValues);
-
-      return {
-        id: insertValues.id,
-        amount: insertValues.amount,
-        categoryId: insertValues.categoryId,
-        title: insertValues.title,
-        note: insertValues.note,
-        date: insertValues.date,
-        createdAt: insertValues.createdAt,
-        updatedAt: insertValues.updatedAt,
-        deletedAt: insertValues.deletedAt,
-      };
+    const insertValues = {
+      id: docRef.id,
+      userId,
+      amount: data.amount,
+      categoryId: data.categoryId,
+      title: data.title,
+      note: data.note || null,
+      date: Timestamp.fromDate(data.date),
+      createdAt: Timestamp.fromDate(now),
+      updatedAt: Timestamp.fromDate(now),
+      deletedAt: null,
     };
 
-    return tx ? await runInTx(tx) : await db.transaction(async (innerTx) => runInTx(innerTx));
+    await setDoc(docRef, insertValues);
+
+    return {
+      id: insertValues.id,
+      amount: insertValues.amount,
+      categoryId: insertValues.categoryId,
+      title: insertValues.title,
+      note: insertValues.note,
+      date: data.date,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
   }
 
   public async updateExpense(
@@ -54,93 +76,47 @@ export class ExpenseRepository implements IExpenseRepository {
     data: ExpenseUpdate,
     tx?: any
   ): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      const updateValues: Record<string, any> = {
-        updatedAt: now,
-      };
-
-      if (data.amount !== undefined) updateValues.amount = data.amount;
-      if (data.categoryId !== undefined) updateValues.categoryId = data.categoryId;
-      if (data.title !== undefined) updateValues.title = data.title;
-      if (data.note !== undefined) updateValues.note = data.note || null;
-      if (data.date !== undefined) updateValues.date = data.date;
-
-      logger.debug(`ExpenseRepository: Updating expense ${id} for user ${userId}`);
-      await executor
-        .update(expenses)
-        .set(updateValues)
-        .where(
-          and(
-            eq(expenses.id, id),
-            eq(expenses.userId, userId)
-          )
-        );
+    logger.debug(`ExpenseRepository: Updating expense ${id} in Firestore for user ${userId}`);
+    const docRef = doc(db, 'expenses', id);
+    const updateValues: Record<string, any> = {
+      updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    await (tx ? runInTx(tx) : db.transaction(async (innerTx) => runInTx(innerTx)));
+    if (data.amount !== undefined) updateValues.amount = data.amount;
+    if (data.categoryId !== undefined) updateValues.categoryId = data.categoryId;
+    if (data.title !== undefined) updateValues.title = data.title;
+    if (data.note !== undefined) updateValues.note = data.note || null;
+    if (data.date !== undefined) updateValues.date = Timestamp.fromDate(data.date);
+
+    await updateDoc(docRef, updateValues);
   }
 
   public async deleteExpense(userId: string, id: string, tx?: any): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      logger.debug(`ExpenseRepository: Soft-deleting expense ${id} for user ${userId}`);
-      await executor
-        .update(expenses)
-        .set({ deletedAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(expenses.id, id),
-            eq(expenses.userId, userId)
-          )
-        );
-    };
-
-    await (tx ? runInTx(tx) : db.transaction(async (innerTx) => runInTx(innerTx)));
+    logger.debug(`ExpenseRepository: Soft-deleting expense ${id} in Firestore for user ${userId}`);
+    const docRef = doc(db, 'expenses', id);
+    await updateDoc(docRef, {
+      deletedAt: Timestamp.fromDate(new Date()),
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
   }
 
   public async restoreExpense(userId: string, id: string, tx?: any): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      logger.debug(`ExpenseRepository: Restoring expense ${id} for user ${userId}`);
-      await executor
-        .update(expenses)
-        .set({ deletedAt: null, updatedAt: now })
-        .where(
-          and(
-            eq(expenses.id, id),
-            eq(expenses.userId, userId)
-          )
-        );
-    };
-
-    await (tx ? runInTx(tx) : db.transaction(async (innerTx) => runInTx(innerTx)));
+    logger.debug(`ExpenseRepository: Restoring expense ${id} in Firestore for user ${userId}`);
+    const docRef = doc(db, 'expenses', id);
+    await updateDoc(docRef, {
+      deletedAt: null,
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
   }
 
   public async getExpenseById(userId: string, id: string): Promise<Expense | null> {
-    const results = await db
-      .select({
-        id: expenses.id,
-        amount: expenses.amount,
-        categoryId: expenses.categoryId,
-        title: expenses.title,
-        note: expenses.note,
-        date: expenses.date,
-        createdAt: expenses.createdAt,
-        updatedAt: expenses.updatedAt,
-        deletedAt: expenses.deletedAt,
-      })
-      .from(expenses)
-      .where(
-        and(
-          eq(expenses.id, id),
-          eq(expenses.userId, userId),
-          isNull(expenses.deletedAt)
-        )
-      )
-      .limit(1);
-
-    return results.length > 0 ? results[0] : null;
+    const docRef = doc(db, 'expenses', id);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+    const expense = mapDocToExpense(snap);
+    const data = snap.data();
+    if (expense.deletedAt || data?.userId !== userId) return null;
+    return expense;
   }
 
   public async getExpensesByMonth(userId: string, monthStr: string): Promise<Expense[]> {
@@ -148,37 +124,30 @@ export class ExpenseRepository implements IExpenseRepository {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
-    const results = await db
-      .select({
-        id: expenses.id,
-        amount: expenses.amount,
-        categoryId: expenses.categoryId,
-        title: expenses.title,
-        note: expenses.note,
-        date: expenses.date,
-        createdAt: expenses.createdAt,
-        updatedAt: expenses.updatedAt,
-        deletedAt: expenses.deletedAt,
-      })
-      .from(expenses)
-      .where(
-        and(
-          eq(expenses.userId, userId),
-          isNull(expenses.deletedAt),
-          between(expenses.date, startDate, endDate)
-        )
-      )
-      .orderBy(desc(expenses.date));
+    const q = query(
+      collection(db, 'expenses'),
+      where('userId', '==', userId),
+      orderBy('date', 'desc')
+    );
+    const snap = await getDocs(q);
+    const results: Expense[] = [];
+
+    snap.forEach((docSnap) => {
+      const exp = mapDocToExpense(docSnap);
+      if (!exp.deletedAt && exp.date >= startDate && exp.date <= endDate) {
+        results.push(exp);
+      }
+    });
 
     return results;
   }
 
   public async searchExpenses(
     userId: string,
-    query: string,
+    queryStr: string,
     options: { limit?: number; offset?: number } = {}
   ): Promise<Expense[]> {
-    return this.getExpenses(userId, { search: query, ...options });
+    return this.getExpenses(userId, { search: queryStr, ...options });
   }
 
   public async getExpenses(
@@ -191,97 +160,98 @@ export class ExpenseRepository implements IExpenseRepository {
       categoryId?: string;
     } = {}
   ): Promise<Expense[]> {
-    const limit = options.limit ?? 20;
-    const offset = options.offset ?? 0;
-
-    let condition = and(
-      eq(expenses.userId, userId),
-      isNull(expenses.deletedAt)
+    const limitVal = options.limit ?? 100000;
+    const q = query(
+      collection(db, 'expenses'),
+      where('userId', '==', userId),
+      orderBy('date', 'desc')
     );
 
-    if (options.search && options.search.trim().length > 0) {
-      condition = and(condition, like(expenses.title, `%${options.search.trim()}%`)) as any;
-    }
+    const snap = await getDocs(q);
+    let results: Expense[] = [];
 
-    if (options.categoryId) {
-      condition = and(condition, eq(expenses.categoryId, options.categoryId)) as any;
-    }
+    snap.forEach((docSnap) => {
+      const exp = mapDocToExpense(docSnap);
+      if (exp.deletedAt) return;
 
-    if (options.filter && options.filter !== 'all') {
-      const now = new Date();
-      if (options.filter === 'today') {
-        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-        condition = and(condition, between(expenses.date, start, end)) as any;
-      } else if (options.filter === 'week') {
-        const day = now.getDay();
-        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day, 0, 0, 0, 0);
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - day), 23, 59, 59, 999);
-        condition = and(condition, between(expenses.date, start, end)) as any;
-      } else if (options.filter === 'month') {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        condition = and(condition, between(expenses.date, start, end)) as any;
+      // Filter by Category
+      if (options.categoryId && exp.categoryId !== options.categoryId) return;
+
+      // Filter by Search Query
+      if (options.search && options.search.trim().length > 0) {
+        const term = options.search.toLowerCase().trim();
+        const titleMatch = exp.title.toLowerCase().includes(term);
+        const noteMatch = exp.note ? exp.note.toLowerCase().includes(term) : false;
+        if (!titleMatch && !noteMatch) return;
       }
-    }
 
-    const results = await db
-      .select({
-        id: expenses.id,
-        amount: expenses.amount,
-        categoryId: expenses.categoryId,
-        title: expenses.title,
-        note: expenses.note,
-        date: expenses.date,
-        createdAt: expenses.createdAt,
-        updatedAt: expenses.updatedAt,
-        deletedAt: expenses.deletedAt,
-      })
-      .from(expenses)
-      .where(condition)
-      .orderBy(desc(expenses.date))
-      .limit(limit)
-      .offset(offset);
+      // Filter by Preset ranges
+      if (options.filter && options.filter !== 'all') {
+        const now = new Date();
+        if (options.filter === 'today') {
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+          if (exp.date < start || exp.date > end) return;
+        } else if (options.filter === 'week') {
+          const day = now.getDay();
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day, 0, 0, 0, 0);
+          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - day), 23, 59, 59, 999);
+          if (exp.date < start || exp.date > end) return;
+        } else if (options.filter === 'month') {
+          const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          if (exp.date < start || exp.date > end) return;
+        }
+      }
 
-    return results;
+      results.push(exp);
+    });
+
+    // Apply offset and limit client-side
+    const offset = options.offset ?? 0;
+    return results.slice(offset, offset + limitVal);
   }
 
-  public async getCategoryTotals(userId: string, monthStr: string): Promise<Array<{
-    categoryId: string;
-    categoryName: string;
-    categoryColor: string;
-    categoryIcon: string;
-    totalAmount: number;
-  }>> {
-    const [year, month] = monthStr.split('-').map(Number);
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+  public async getCategoryTotals(
+    userId: string,
+    monthStr: string
+  ): Promise<
+    Array<{
+      categoryId: string;
+      categoryName: string;
+      categoryColor: string;
+      categoryIcon: string;
+      totalAmount: number;
+    }>
+  > {
+    const monthlyExpenses = await this.getExpensesByMonth(userId, monthStr);
+    
+    // Fetch categories to resolve names & colors
+    const catQuery = query(collection(db, 'categories'), where('userId', '==', userId));
+    const catSnap = await getDocs(catQuery);
+    const categoryMap = new Map<string, any>();
+    catSnap.forEach((docSnap) => {
+      categoryMap.set(docSnap.id, docSnap.data());
+    });
 
-    const results = await db
-      .select({
-        categoryId: expenses.categoryId,
-        categoryName: categories.name,
-        categoryColor: categories.color,
-        categoryIcon: categories.icon,
-        totalAmount: sql<number>`coalesce(sum(${expenses.amount}), 0)`,
-      })
-      .from(expenses)
-      .innerJoin(categories, eq(expenses.categoryId, categories.id))
-      .where(
-        and(
-          eq(expenses.userId, userId),
-          isNull(expenses.deletedAt),
-          between(expenses.date, startDate, endDate)
-        )
-      )
-      .groupBy(expenses.categoryId, categories.name, categories.color, categories.icon);
+    const totalsMap = new Map<string, number>();
+    monthlyExpenses.forEach((exp) => {
+      const current = totalsMap.get(exp.categoryId) || 0;
+      totalsMap.set(exp.categoryId, current + exp.amount);
+    });
 
-    return results.map(row => ({
-      categoryId: row.categoryId,
-      categoryName: row.categoryName,
-      categoryColor: row.categoryColor,
-      categoryIcon: row.categoryIcon,
-      totalAmount: Number(row.totalAmount),
-    }));
+    const results: any[] = [];
+    totalsMap.forEach((totalAmount, categoryId) => {
+      const cat = categoryMap.get(categoryId);
+      results.push({
+        categoryId,
+        categoryName: cat?.name || 'Other',
+        categoryColor: cat?.color || 'slate',
+        categoryIcon: cat?.icon || 'grid',
+        totalAmount,
+      });
+    });
+
+    return results;
   }
 }

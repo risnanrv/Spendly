@@ -1,22 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getCategoriesAction,
-  createCategoryAction,
-  updateCategoryAction,
-  deleteCategoryAction,
-} from '@/actions/categories';
+import { categoryService } from '@/lib/services';
+import { auth } from '@/firebase/config';
 import { useToastStore } from '@/stores/toast.store';
 
 export function useCategories() {
+  const userId = auth.currentUser?.uid;
+
   return useQuery({
-    queryKey: ['categories'],
+    queryKey: ['categories', userId],
     queryFn: async () => {
-      const response = await getCategoriesAction();
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response.data;
+      if (!userId) return [];
+      return categoryService.getCategoriesWithStats(userId);
     },
+    enabled: !!userId,
   });
 }
 
@@ -26,14 +22,14 @@ export function useCreateCategory() {
 
   return useMutation({
     mutationFn: async (data: { name: string; icon: string; color: string }) => {
-      const response = await createCategoryAction(data);
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response.data;
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Unauthorized');
+
+      return categoryService.createCategory(userId, data.name, data.icon, data.color);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      const userId = auth.currentUser?.uid;
+      queryClient.invalidateQueries({ queryKey: ['categories', userId] });
       addToast('Category created successfully!', 'success');
     },
     onError: (err: any) => {
@@ -54,16 +50,16 @@ export function useUpdateCategory() {
       id: string;
       data: { name?: string; icon?: string; color?: string };
     }) => {
-      const response = await updateCategoryAction(id, data);
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response;
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Unauthorized');
+
+      return categoryService.updateCategory(userId, id, data.name, data.icon, data.color);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      const userId = auth.currentUser?.uid;
+      queryClient.invalidateQueries({ queryKey: ['categories', userId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
       addToast('Category updated successfully!', 'success');
     },
     onError: (err: any) => {
@@ -78,16 +74,16 @@ export function useDeleteCategory() {
 
   return useMutation({
     mutationFn: async ({ id, reassignToId }: { id: string; reassignToId?: string }) => {
-      const response = await deleteCategoryAction(id, reassignToId);
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response;
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Unauthorized');
+
+      return categoryService.deleteCategory(userId, id, reassignToId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      const userId = auth.currentUser?.uid;
+      queryClient.invalidateQueries({ queryKey: ['categories', userId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
       addToast('Category deleted successfully.', 'success');
     },
     onError: (err: any) => {

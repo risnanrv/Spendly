@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
 import { Loader2 } from 'lucide-react';
+import { Logo } from '@/components/ui/Logo';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -26,11 +27,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-white text-black">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-black flex items-center justify-center shadow-sm">
-            <span className="text-3xl font-extrabold tracking-tighter text-white">S</span>
-          </div>
-          <h1 className="text-xl font-bold tracking-tight mt-2 text-[#111111]">Spendly</h1>
-          <p className="text-sm text-[#707070]">Loading workspace...</p>
+          <Logo className="w-16 h-16" />
+          <h1 className="text-xl font-bold tracking-tight text-[#111111]">Spendly</h1>
+          <p className="text-xs text-[#707070] mt-1">Loading workspace...</p>
         </div>
         <div className="absolute bottom-12">
           <Loader2 className="h-6 w-6 animate-spin text-black" />

@@ -1,16 +1,184 @@
-import { createAuthClient } from 'better-auth/react';
+import { useState, useEffect } from 'react';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as fbSignOut,
+  onAuthStateChanged,
+  updatePassword,
+  updateProfile,
+  signInWithPopup,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { auth, googleProvider, db } from '@/firebase/config';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-const getClientBaseURL = () => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  let url = process.env.NEXT_PUBLIC_APP_URL || process.env.BETTER_AUTH_URL || 'http://localhost:3000';
-  if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
-    url = `https://${url}`;
-  }
-  return url;
+export interface UserSession {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    image: string | null;
+  };
+}
+
+// React Hook to subscribe to authentication state, matching the Better Auth react signature.
+function useSession() {
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [isPending, setIsPending] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        let name = fbUser.displayName || '';
+        let image = fbUser.photoURL || null;
+
+        try {
+          const userDocRef = doc(db, 'users', fbUser.uid);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.name) name = data.name;
+            if (data.image) image = data.image;
+          } else {
+            // Seed User Document if missing
+            await setDoc(
+              userDocRef,
+              {
+                userId: fbUser.uid,
+                name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Spendly User',
+                email: fbUser.email || '',
+                image: fbUser.photoURL || null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+              { merge: true }
+            );
+          }
+        } catch (error) {
+          console.error('Error fetching/creating Firestore user details:', error);
+        }
+
+        setSession({
+          user: {
+            id: fbUser.uid,
+            email: fbUser.email || '',
+            name: name || fbUser.email?.split('@')[0] || 'Spendly User',
+            image: image,
+          },
+        });
+      } else {
+        setSession(null);
+      }
+      setIsPending(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  return { data: session, isPending };
+}
+
+export const authClient = {
+  useSession,
+  
+  signIn: {
+    email: async ({ email, password }: { email: string; password: string }) => {
+      try {
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        return { data: { user: credential.user }, error: null };
+      } catch (error: any) {
+        return { data: null, error: { message: error.message || 'Invalid email or password.' } };
+      }
+    },
+    google: async () => {
+      try {
+        const credential = await signInWithPopup(auth, googleProvider);
+        const fbUser = credential.user;
+
+        // Ensure user is seeded in Firestore
+        const userDocRef = doc(db, 'users', fbUser.uid);
+        await setDoc(
+          userDocRef,
+          {
+            userId: fbUser.uid,
+            name: fbUser.displayName || 'Spendly User',
+            email: fbUser.email || '',
+            image: fbUser.photoURL || null,
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
+
+        return { data: { user: fbUser }, error: null };
+      } catch (error: any) {
+        return { data: null, error: { message: error.message || 'Google authentication failed.' } };
+      }
+    },
+  },
+
+  signUp: {
+    email: async ({ email, password, name }: { email: string; password: string; name: string }) => {
+      try {
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        const fbUser = credential.user;
+
+        // Update display name inside firebase auth profile
+        await updateProfile(fbUser, { displayName: name });
+
+        // Seed user profile inside Cloud Firestore users collection
+        const userDocRef = doc(db, 'users', fbUser.uid);
+        await setDoc(userDocRef, {
+          userId: fbUser.uid,
+          name,
+          email,
+          image: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        return { data: { user: fbUser }, error: null };
+      } catch (error: any) {
+        return { data: null, error: { message: error.message || 'Account registration failed.' } };
+      }
+    },
+  },
+
+  signOut: async () => {
+    try {
+      await fbSignOut(auth);
+      return { error: null };
+    } catch (error: any) {
+      return { error: { message: error.message || 'Sign out failed.' } };
+    }
+  },
+
+  changePassword: async ({
+    currentPassword,
+    newPassword,
+  }: {
+    currentPassword?: string;
+    newPassword: string;
+    revokeOtherSessions?: boolean;
+  }) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('User session not found.');
+      }
+
+      // Re-authenticate user before executing password updates
+      if (currentPassword && currentUser.email) {
+        const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+
+      await updatePassword(currentUser, newPassword);
+      return { error: null };
+    } catch (error: any) {
+      return { error: { message: error.message || 'Password update failed.' } };
+    }
+  },
 };
-
-export const authClient = createAuthClient({
-  baseURL: getClientBaseURL(),
-});

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useCategories } from '@/hooks/useCategories';
 import { getCategoryColorClasses } from '@/utils/colors';
+import { formatAmount } from '@/utils/currency';
 import { CategoryIcon } from '@/components/ui/CategoryIcon';
 import { CategoryDialog } from '@/components/categories/CategoryDialog';
 import { CategoryDeleteDialog } from '@/components/categories/CategoryDeleteDialog';
@@ -79,45 +80,62 @@ export default function CategoriesSettingsPage() {
               key={cat.id}
               className="bg-white border border-[#EAEAEA] rounded-2xl p-4 shadow-sm flex items-center justify-between transition-all"
             >
-              {/* Left Group */}
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white ${colorSet.fill}`}>
+              {/* Left Group Info */}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 ${colorSet.fill}`}>
                   <CategoryIcon name={cat.icon} size={16} />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold text-[#111111] leading-tight">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-bold text-[#111111] leading-tight truncate">
                     {cat.name}
                   </span>
-                  {cat.isSystem ? (
-                    <span className="text-[8px] font-black uppercase text-[#707070] tracking-wider mt-0.5">
-                      System
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {cat.isSystem ? (
+                      <span className="text-[8px] font-black uppercase text-[#707070] bg-[#F7F7F7] border border-[#EAEAEA] px-1 py-0.5 rounded">
+                        System
+                      </span>
+                    ) : (
+                      <span className="text-[8px] font-black uppercase text-[#888888] bg-[#F7F7F7] border border-[#EAEAEA] px-1 py-0.5 rounded">
+                        Custom
+                      </span>
+                    )}
+                    <span className="text-[9px] text-[#707070] font-semibold">
+                      • {cat.expenseCount || 0} txn{cat.expenseCount === 1 ? '' : 's'}
                     </span>
-                  ) : (
-                    <span className="text-[8px] font-black uppercase text-[#A0A0A0] tracking-wider mt-0.5">
-                      Custom
-                    </span>
-                  )}
+                  </div>
                 </div>
               </div>
 
-              {/* Right Group Actions */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleEdit(cat)}
-                  className="p-2 text-[#707070] hover:text-black rounded-lg hover:bg-[#F7F7F7] transition-all"
-                  title="Edit Category"
-                >
-                  <Edit3 className="h-4 w-4" />
-                </button>
-                {!cat.isSystem && (
+              {/* Right Group Actions & Lifetime Total */}
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Total Stats */}
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-black text-[#111111] leading-none">
+                    ₹{formatAmount(cat.totalSpent || 0)}
+                  </span>
+                  <span className="text-[8px] text-[#707070] uppercase font-bold tracking-wider mt-1">
+                    Lifetime
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-0.5 border-l border-[#EAEAEA] pl-2">
                   <button
-                    onClick={() => handleDelete(cat)}
-                    className="p-2 text-[#707070] hover:text-red-500 rounded-lg hover:bg-red-50 transition-all"
-                    title="Delete Category"
+                    onClick={() => handleEdit(cat)}
+                    className="p-1.5 text-[#707070] hover:text-black rounded-lg hover:bg-[#F7F7F7] transition-all"
+                    title="Edit Category"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Edit3 className="h-4 w-4" />
                   </button>
-                )}
+                  {!cat.isSystem && (
+                    <button
+                      onClick={() => handleDelete(cat)}
+                      className="p-1.5 text-[#707070] hover:text-red-500 rounded-lg hover:bg-red-50 transition-all"
+                      title="Delete Category"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );

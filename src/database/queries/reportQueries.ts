@@ -1,6 +1,7 @@
-import { db } from '../../lib/db';
-import { expenses, categories } from '../schema';
-import { eq, and, isNull, gte, lte } from 'drizzle-orm';
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { db } from '../../firebase/config';
+import { mapDocToExpense } from '../repositories/ExpenseRepository';
+import { mapDocToCategory } from '../repositories/CategoryRepository';
 
 export interface RawExpenseRow {
   id: string;
@@ -16,36 +17,54 @@ export interface RawExpenseRow {
 
 /**
  * Fetches all active expenses with their category details for a date range.
- * Used exclusively by ReportService to power all report aggregations.
+ * Used by ReportService to power all report aggregations.
  */
 export const fetchExpensesWithCategories = async (
   userId: string,
   startDate: Date,
   endDate: Date
 ): Promise<RawExpenseRow[]> => {
-  const rows = await db
-    .select({
-      id: expenses.id,
-      amount: expenses.amount,
-      categoryId: expenses.categoryId,
-      title: expenses.title,
-      note: expenses.note,
-      date: expenses.date,
-      categoryName: categories.name,
-      categoryColor: categories.color,
-      categoryIcon: categories.icon,
-    })
-    .from(expenses)
-    .innerJoin(categories, eq(expenses.categoryId, categories.id))
-    .where(
-      and(
-        eq(expenses.userId, userId),
-        isNull(expenses.deletedAt),
-        gte(expenses.date, startDate),
-        lte(expenses.date, endDate)
-      )
-    )
-    .orderBy(expenses.date);
+  // 1. Fetch user's categories to map details in memory (Inner Join simulation)
+  const catQuery = query(collection(db, 'categories'), where('userId', '==', userId));
+  const catSnap = await getDocs(catQuery);
+  const categoriesMap = new Map<string, any>();
+  
+  catSnap.forEach((docSnap) => {
+    categoriesMap.set(docSnap.id, mapDocToCategory(docSnap));
+  });
 
-  return rows;
+  // 2. Fetch user's expenses
+  const expQuery = query(
+    collection(db, 'expenses'),
+    where('userId', '==', userId),
+    orderBy('date', 'asc')
+  );
+  const expSnap = await getDocs(expQuery);
+  
+  const results: RawExpenseRow[] = [];
+  expSnap.forEach((docSnap) => {
+    const exp = mapDocToExpense(docSnap);
+    
+    if (exp.deletedAt) return;
+    
+    // Filter by date range boundary
+    if (exp.date < startDate || exp.date > endDate) return;
+
+    const cat = categoriesMap.get(exp.categoryId);
+    if (!cat) return; // Simulates an INNER JOIN - drops uncategorized or deleted categories
+
+    results.push({
+      id: exp.id,
+      amount: exp.amount,
+      categoryId: exp.categoryId,
+      title: exp.title,
+      note: exp.note,
+      date: exp.date,
+      categoryName: cat.name,
+      categoryColor: cat.color,
+      categoryIcon: cat.icon,
+    });
+  });
+
+  return results;
 };

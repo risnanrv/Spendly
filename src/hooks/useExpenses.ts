@@ -1,23 +1,45 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getExpensesAction,
-  createExpenseAction,
-  updateExpenseAction,
-  deleteExpenseAction,
-  type GetExpensesFilters,
-} from '@/actions/expenses';
+import { expenseService, expenseRepo } from '@/lib/services';
+import { auth } from '@/firebase/config';
 import { useToastStore } from '@/stores/toast.store';
+import type { ExpenseInsert, ExpenseUpdate } from '@/database/repositories/interfaces';
+
+export interface GetExpensesFilters {
+  monthStr?: string; // YYYY-MM
+  categoryId?: string;
+  search?: string;
+}
 
 export function useExpenses(filters: GetExpensesFilters = {}) {
+  const userId = auth.currentUser?.uid;
+
   return useQuery({
-    queryKey: ['expenses', filters],
+    queryKey: ['expenses', userId, filters],
     queryFn: async () => {
-      const response = await getExpensesAction(filters);
-      if (!response.success) {
-        throw new Error(response.error);
+      if (!userId) return [];
+      
+      const filterOption = filters.monthStr
+        ? undefined 
+        : undefined;
+
+      const results = await expenseRepo.getExpenses(userId, {
+        categoryId: filters.categoryId || undefined,
+        search: filters.search || undefined,
+        filter: undefined, 
+      });
+
+      // Filter by Month client-side
+      if (filters.monthStr) {
+        const [year, month] = filters.monthStr.split('-').map(Number);
+        const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+        const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+        return results.filter((exp) => exp.date >= startDate && exp.date <= endDate);
       }
-      return response.data;
+
+      return results;
     },
+    enabled: !!userId,
   });
 }
 
@@ -33,15 +55,26 @@ export function useCreateExpense() {
       dateStr: string;
       note?: string;
     }) => {
-      const response = await createExpenseAction(data);
-      if (!response.success) {
-        throw new Error(response.error);
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Unauthorized');
+
+      const insertData: ExpenseInsert = {
+        title: data.title,
+        amount: data.amount,
+        categoryId: data.categoryId,
+        date: new Date(data.dateStr),
+      };
+      if (data.note) {
+        insertData.note = data.note;
       }
-      return response.data;
+
+      return expenseService.createExpense(userId, insertData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      const userId = auth.currentUser?.uid;
+      queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
+      queryClient.invalidateQueries({ queryKey: ['reports', userId] });
       addToast('Expense logged successfully!', 'success');
     },
     onError: (err: any) => {
@@ -68,15 +101,23 @@ export function useUpdateExpense() {
         note?: string;
       };
     }) => {
-      const response = await updateExpenseAction(id, data);
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response;
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Unauthorized');
+
+      const updateData: ExpenseUpdate = {};
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.amount !== undefined) updateData.amount = data.amount;
+      if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+      if (data.dateStr !== undefined) updateData.date = new Date(data.dateStr);
+      if (data.note !== undefined) updateData.note = data.note;
+
+      return expenseService.updateExpense(userId, id, updateData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      const userId = auth.currentUser?.uid;
+      queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
+      queryClient.invalidateQueries({ queryKey: ['reports', userId] });
       addToast('Expense updated successfully!', 'success');
     },
     onError: (err: any) => {
@@ -91,19 +132,19 @@ export function useDeleteExpense() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await deleteExpenseAction(id);
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response;
+      const userId = auth.currentUser?.uid;
+      if (!userId) throw new Error('Unauthorized');
+
+      return expenseService.deleteExpense(userId, id);
     },
     onMutate: async (id) => {
+      const userId = auth.currentUser?.uid;
       // Optimistic update for immediate visual response
-      await queryClient.cancelQueries({ queryKey: ['expenses'] });
-      const previousExpenses = queryClient.getQueryData(['expenses']);
-      
-      // Update any matching list queries optimistically
-      queryClient.setQueriesData({ queryKey: ['expenses'] }, (old: any) => {
+      await queryClient.cancelQueries({ queryKey: ['expenses', userId] });
+      const previousExpenses = queryClient.getQueryData(['expenses', userId]);
+
+      // Update matching list queries optimistically
+      queryClient.setQueriesData({ queryKey: ['expenses', userId] }, (old: any) => {
         if (!old) return old;
         return old.filter((item: any) => item.id !== id);
       });
@@ -111,14 +152,17 @@ export function useDeleteExpense() {
       return { previousExpenses };
     },
     onError: (err: any, id, context) => {
+      const userId = auth.currentUser?.uid;
       if (context?.previousExpenses) {
-        queryClient.setQueriesData({ queryKey: ['expenses'] }, context.previousExpenses);
+        queryClient.setQueriesData({ queryKey: ['expenses', userId], filters: undefined }, context.previousExpenses);
       }
       addToast(err.message || 'Failed to delete expense', 'danger');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      const userId = auth.currentUser?.uid;
+      queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
+      queryClient.invalidateQueries({ queryKey: ['reports', userId] });
       addToast('Expense deleted successfully.', 'success');
     },
   });

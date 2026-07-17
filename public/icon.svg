@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <rect width="512" height="512" fill="#111111"/>
-  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="310" fill="#FFFFFF">S</text>
+  <!-- Base premium black rounded square -->
+  <rect width="512" height="512" rx="128" fill="#111111"/>
+  <!-- Abstract geometric ribbon representing financial flow / letter "S" -->
+  <path d="M 192,128 H 384 V 192 H 288 L 192,288 V 384 H 128 V 320 H 224 L 320,224 V 128 Z" fill="#FFFFFF"/>
 </svg>

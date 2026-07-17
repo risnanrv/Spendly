@@ -1,6 +1,5 @@
 import type { ICategoryRepository, IExpenseRepository } from '@/database/repositories/interfaces';
 import type { Category } from '@/models/domain';
-import { db } from '@/lib/db';
 import { logger } from '@/utils/logger';
 import { CURATED_COLORS, CURATED_ICONS } from '@/config/category-constants';
 
@@ -144,10 +143,8 @@ export class CategoryService {
         throw new Error('Selected replacement category is invalid or deleted.');
       }
 
-      await db.transaction(async (tx) => {
-        await this.categoryRepo.reassignExpenses(userId, id, reassignToId, tx);
-        await this.categoryRepo.deleteCategory(userId, id, tx);
-      });
+      await this.categoryRepo.reassignExpenses(userId, id, reassignToId);
+      await this.categoryRepo.deleteCategory(userId, id);
     } else {
       await this.categoryRepo.deleteCategory(userId, id);
     }

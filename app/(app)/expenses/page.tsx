@@ -55,25 +55,43 @@ export default function ExpensesPage() {
   // Query ALL expenses to calculate recency of categories
   const { data: allExpenses } = useExpenses();
 
-  // Calculate sorted categories by recency of use
+  // Calculate sorted categories using: Most Used -> Recently Used -> Others
   const sortedCategories = useMemo(() => {
     if (!categories) return [];
-    if (!allExpenses || allExpenses.length === 0) return categories;
-
-    const recencyMap: Record<string, number> = {};
-    allExpenses.forEach((exp: any) => {
-      const time = new Date(exp.date).getTime();
-      if (!recencyMap[exp.categoryId] || time > recencyMap[exp.categoryId]) {
-        recencyMap[exp.categoryId] = time;
-      }
-    });
+    
+    const counts: Record<string, number> = {};
+    const recency: Record<string, number> = {};
+    
+    if (allExpenses && allExpenses.length > 0) {
+      allExpenses.forEach((exp: any) => {
+        const catId = exp.categoryId;
+        counts[catId] = (counts[catId] || 0) + 1;
+        const time = new Date(exp.date).getTime();
+        if (!recency[catId] || time > recency[catId]) {
+          recency[catId] = time;
+        }
+      });
+    }
 
     return [...categories].sort((a: any, b: any) => {
-      const timeA = recencyMap[a.id] || 0;
-      const timeB = recencyMap[b.id] || 0;
-      if (timeA !== timeB) {
-        return timeB - timeA;
+      const countA = counts[a.id] || 0;
+      const countB = counts[b.id] || 0;
+
+      // 1. Most Used
+      if (countA !== countB) {
+        return countB - countA;
       }
+
+      // 2. Recently Used (if they have been used at least once)
+      if (countA > 0) {
+        const timeA = recency[a.id] || 0;
+        const timeB = recency[b.id] || 0;
+        if (timeA !== timeB) {
+          return timeB - timeA;
+        }
+      }
+
+      // 3. Others (Alphabetical)
       return a.name.localeCompare(b.name);
     });
   }, [categories, allExpenses]);

@@ -1,7 +1,16 @@
-import { db } from '@/lib/db';
-import * as schema from '@/database/schema';
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  query,
+  where,
+  writeBatch,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '@/firebase/config';
 import { logger } from '@/utils/logger';
-import { eq } from 'drizzle-orm';
 
 export interface BackupPayload {
   app: 'Spendly';
@@ -18,22 +27,82 @@ export interface BackupPayload {
 
 export class BackupService {
   /**
-   * Compiles SQLite database tables for a specific user and returns a versioned BackupPayload object.
+   * Compiles Firestore collection documents for a specific user and returns a BackupPayload object.
    */
   public async getBackupData(userId: string): Promise<BackupPayload> {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    logger.info(`BackupService: Executing table snapshot extraction for user ${userId}...`);
-    
+    logger.info(`BackupService: Executing Firestore snapshot extraction for user ${userId}...`);
+
     try {
-      const [expensesList, categoriesList, budgetsList, settingsList, preferencesList] = await Promise.all([
-        db.select().from(schema.expenses).where(eq(schema.expenses.userId, userId)),
-        db.select().from(schema.categories).where(eq(schema.categories.userId, userId)), // Only custom categories exported
-        db.select().from(schema.monthlyBudgets).where(eq(schema.monthlyBudgets.userId, userId)),
-        db.select().from(schema.settings).where(eq(schema.settings.userId, userId)),
-        db.select().from(schema.userPreferences).where(eq(schema.userPreferences.userId, userId)),
+      const expensesQuery = query(collection(db, 'expenses'), where('userId', '==', userId));
+      const categoriesQuery = query(collection(db, 'categories'), where('userId', '==', userId));
+      const budgetsQuery = query(collection(db, 'budgets'), where('userId', '==', userId));
+      const settingsDocRef = doc(db, 'settings', userId);
+
+      const [expensesSnap, categoriesSnap, budgetsSnap, settingsSnap] = await Promise.all([
+        getDocs(expensesQuery),
+        getDocs(categoriesQuery),
+        getDocs(budgetsQuery),
+        getDoc(settingsDocRef),
       ]);
+
+      const expensesList: any[] = [];
+      expensesSnap.forEach((d) => {
+        const data = d.data();
+        expensesList.push({
+          ...data,
+          date: data.date instanceof Timestamp ? data.date.toDate().toISOString() : data.date,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+          deletedAt: data.deletedAt instanceof Timestamp ? data.deletedAt.toDate().toISOString() : data.deletedAt,
+        });
+      });
+
+      const categoriesList: any[] = [];
+      categoriesSnap.forEach((d) => {
+        const data = d.data();
+        categoriesList.push({
+          ...data,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+          deletedAt: data.deletedAt instanceof Timestamp ? data.deletedAt.toDate().toISOString() : data.deletedAt,
+        });
+      });
+
+      const budgetsList: any[] = [];
+      budgetsSnap.forEach((d) => {
+        const data = d.data();
+        budgetsList.push({
+          ...data,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+          deletedAt: data.deletedAt instanceof Timestamp ? data.deletedAt.toDate().toISOString() : data.deletedAt,
+        });
+      });
+
+      const settingsList: any[] = [];
+      const preferencesList: any[] = [];
+      if (settingsSnap.exists()) {
+        const settingsData = settingsSnap.data();
+        Object.entries(settingsData).forEach(([key, value]) => {
+          if (key === 'userId' || key === 'updatedAt') return;
+          
+          const record = {
+            key,
+            value,
+            createdAt: settingsData.createdAt instanceof Timestamp ? settingsData.createdAt.toDate().toISOString() : new Date().toISOString(),
+            updatedAt: settingsData.updatedAt instanceof Timestamp ? settingsData.updatedAt.toDate().toISOString() : new Date().toISOString(),
+          };
+
+          if (key.startsWith('preferences_')) {
+            preferencesList.push(record);
+          } else {
+            settingsList.push(record);
+          }
+        });
+      }
 
       return {
         app: 'Spendly',
@@ -54,14 +123,14 @@ export class BackupService {
   }
 
   /**
-   * Imports backup JSON contents, maps them to the active user, and overrides the user's tables.
+   * Imports backup JSON contents, maps them to the active user, and overrides the user's Firestore data.
    */
   public async restoreBackup(userId: string, backup: BackupPayload): Promise<boolean> {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    logger.info(`BackupService: Committing SQLite restore writes transaction for user ${userId}...`);
-    
+    logger.info(`BackupService: Committing Firestore restore writes transaction for user ${userId}...`);
+
     try {
       if (!backup || backup.app !== 'Spendly') {
         throw new Error('Selected backup file is invalid. Missing app identifier.');
@@ -78,84 +147,113 @@ export class BackupService {
         throw new Error('Invalid schema definition elements in data blocks.');
       }
 
-      // Clear and populate user-specific rows within a transaction
-      await db.transaction(async (tx) => {
-        // Clear previous user-specific entries
-        await tx.delete(schema.expenses).where(eq(schema.expenses.userId, userId));
-        await tx.delete(schema.categories).where(eq(schema.categories.userId, userId));
-        await tx.delete(schema.monthlyBudgets).where(eq(schema.monthlyBudgets.userId, userId));
-        await tx.delete(schema.settings).where(eq(schema.settings.userId, userId));
-        await tx.delete(schema.userPreferences).where(eq(schema.userPreferences.userId, userId));
+      // Step 1: Query and delete all existing user data in Firestore
+      const [expensesSnap, categoriesSnap, budgetsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'expenses'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'categories'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'budgets'), where('userId', '==', userId))),
+      ]);
 
-        if (categories.length > 0) {
-          const parsedCategories = categories.map((c) => ({
-            id: c.id,
-            userId: userId, // Enforce active user ID
-            name: c.name,
-            icon: c.icon,
-            color: c.color,
-            type: c.type,
-            isSystem: false,
-            createdAt: new Date(c.createdAt),
-            updatedAt: new Date(c.updatedAt),
-            deletedAt: c.deletedAt ? new Date(c.deletedAt) : null,
-          }));
-          await tx.insert(schema.categories).values(parsedCategories);
+      const deleteBatch = writeBatch(db);
+      expensesSnap.forEach((d) => deleteBatch.delete(d.ref));
+      categoriesSnap.forEach((d) => deleteBatch.delete(d.ref));
+      budgetsSnap.forEach((d) => deleteBatch.delete(d.ref));
+      await deleteBatch.commit();
+
+      // Step 2: Insert restored data in batches of 500 to avoid Firestore limits
+      const now = new Date();
+      let writeBatchInstance = writeBatch(db);
+      let opCount = 0;
+
+      const commitAndResetBatch = async () => {
+        if (opCount > 0) {
+          await writeBatchInstance.commit();
+          writeBatchInstance = writeBatch(db);
+          opCount = 0;
         }
+      };
 
-        if (expenses.length > 0) {
-          const parsedExpenses = expenses.map((e) => ({
-            id: e.id,
-            userId: userId, // Enforce active user ID
-            amount: e.amount,
-            categoryId: e.categoryId,
-            title: e.title,
-            note: e.note || null,
-            date: new Date(e.date),
-            createdAt: new Date(e.createdAt),
-            updatedAt: new Date(e.updatedAt),
-            deletedAt: e.deletedAt ? new Date(e.deletedAt) : null,
-          }));
-          await tx.insert(schema.expenses).values(parsedExpenses);
-        }
+      // Restore Categories
+      for (const c of categories) {
+        const docRef = doc(db, 'categories', c.id);
+        writeBatchInstance.set(docRef, {
+          id: c.id,
+          userId,
+          name: c.name,
+          icon: c.icon,
+          color: c.color,
+          type: c.type || 'expense',
+          isSystem: Boolean(c.isSystem),
+          createdAt: c.createdAt ? Timestamp.fromDate(new Date(c.createdAt)) : Timestamp.fromDate(now),
+          updatedAt: c.updatedAt ? Timestamp.fromDate(new Date(c.updatedAt)) : Timestamp.fromDate(now),
+          deletedAt: c.deletedAt ? Timestamp.fromDate(new Date(c.deletedAt)) : null,
+        });
 
-        if (budgets.length > 0) {
-          const parsedBudgets = budgets.map((b) => ({
-            id: b.id,
-            userId: userId, // Enforce active user ID
-            month: b.month,
-            amount: b.amount,
-            createdAt: new Date(b.createdAt),
-            updatedAt: new Date(b.updatedAt),
-            deletedAt: b.deletedAt ? new Date(b.deletedAt) : null,
-          }));
-          await tx.insert(schema.monthlyBudgets).values(parsedBudgets);
-        }
+        opCount++;
+        if (opCount >= 400) await commitAndResetBatch();
+      }
 
-        if (Array.isArray(settings) && settings.length > 0) {
-          const parsedSettings = settings.map((s) => ({
-            userId: userId, // Enforce active user ID
-            key: s.key,
-            value: s.value,
-            createdAt: new Date(s.createdAt),
-            updatedAt: new Date(s.updatedAt),
-          }));
-          await tx.insert(schema.settings).values(parsedSettings);
-        }
+      // Restore Expenses
+      for (const e of expenses) {
+        const docRef = doc(db, 'expenses', e.id);
+        writeBatchInstance.set(docRef, {
+          id: e.id,
+          userId,
+          amount: e.amount,
+          categoryId: e.categoryId,
+          title: e.title,
+          note: e.note || null,
+          date: e.date ? Timestamp.fromDate(new Date(e.date)) : Timestamp.fromDate(now),
+          createdAt: e.createdAt ? Timestamp.fromDate(new Date(e.createdAt)) : Timestamp.fromDate(now),
+          updatedAt: e.updatedAt ? Timestamp.fromDate(new Date(e.updatedAt)) : Timestamp.fromDate(now),
+          deletedAt: e.deletedAt ? Timestamp.fromDate(new Date(e.deletedAt)) : null,
+        });
 
-        if (Array.isArray(userPreferences) && userPreferences.length > 0) {
-          const parsedPrefs = userPreferences.map((p) => ({
-            userId: userId, // Enforce active user ID
-            key: p.key,
-            value: p.value,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt),
-          }));
-          await tx.insert(schema.userPreferences).values(parsedPrefs);
-        }
-      });
+        opCount++;
+        if (opCount >= 400) await commitAndResetBatch();
+      }
 
-      logger.info(`BackupService: Data restored successfully for user ${userId}.`);
+      // Restore Budgets
+      for (const b of budgets) {
+        const docRef = doc(db, 'budgets', b.id || `${userId}_${b.month}`);
+        writeBatchInstance.set(docRef, {
+          id: b.id || `${userId}_${b.month}`,
+          userId,
+          month: b.month,
+          amount: b.amount,
+          createdAt: b.createdAt ? Timestamp.fromDate(new Date(b.createdAt)) : Timestamp.fromDate(now),
+          updatedAt: b.updatedAt ? Timestamp.fromDate(new Date(b.updatedAt)) : Timestamp.fromDate(now),
+          deletedAt: b.deletedAt ? Timestamp.fromDate(new Date(b.deletedAt)) : null,
+        });
+
+        opCount++;
+        if (opCount >= 400) await commitAndResetBatch();
+      }
+
+      // Commit any remaining document inserts
+      await commitAndResetBatch();
+
+      // Restore Settings & Preferences into the unified settings doc
+      const settingsDocRef = doc(db, 'settings', userId);
+      const restoredSettings: Record<string, any> = {
+        userId,
+        updatedAt: Timestamp.fromDate(now),
+      };
+
+      if (Array.isArray(settings)) {
+        settings.forEach((s) => {
+          restoredSettings[s.key] = s.value;
+        });
+      }
+      if (Array.isArray(userPreferences)) {
+        userPreferences.forEach((p) => {
+          restoredSettings[p.key] = p.value;
+        });
+      }
+
+      await setDoc(settingsDocRef, restoredSettings);
+
+      logger.info(`BackupService: Firestore data restored successfully for user ${userId}.`);
       return true;
     } catch (err: any) {
       logger.error(`BackupService: Restore backup failed for user ${userId}:`, err);

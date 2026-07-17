@@ -9,7 +9,8 @@ import {
   useTruncateCategories,
   useResetDatabase,
 } from '@/hooks/useSettings';
-import { getBackupAction, restoreBackupAction, exportCSVAction, exportHTMLAction } from '@/actions/backup';
+import { backupService, exportService } from '@/lib/services';
+import { auth } from '@/firebase/config';
 import { getMonthStr } from '@/utils/date';
 import { useToastStore } from '@/stores/toast.store';
 import { DeleteConfirmDialog } from '@/components/expenses/DeleteConfirmDialog';
@@ -31,24 +32,29 @@ export default function BackupsSettingsPage() {
   const resetDatabase = useResetDatabase();
 
   const handleExportJSON = async () => {
-    const res = await getBackupAction();
-    if (!res.success || !res.data) {
-      addToast(res.error || 'Failed to extract database backup', 'danger');
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      addToast('User session not found', 'danger');
       return;
     }
 
-    const payloadString = JSON.stringify(res.data, null, 2);
-    const blob = new Blob([payloadString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    try {
+      const data = await backupService.getBackupData(userId);
+      const payloadString = JSON.stringify(data, null, 2);
+      const blob = new Blob([payloadString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Spendly_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('Backup JSON downloaded successfully.', 'success');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Spendly_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast('Backup JSON downloaded successfully.', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Failed to extract database backup', 'danger');
+    }
   };
 
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,60 +83,74 @@ export default function BackupsSettingsPage() {
   };
 
   const handleConfirmRestore = async () => {
-    if (!restorePayload) return;
-    const res = await restoreBackupAction(restorePayload);
-    if (res.success) {
+    const userId = auth.currentUser?.uid;
+    if (!userId || !restorePayload) return;
+
+    try {
+      await backupService.restoreBackup(userId, restorePayload);
       if (queryClient) {
         queryClient.invalidateQueries();
       }
       addToast('Data snapshot restored successfully!', 'success');
-    } else {
-      addToast(res.error || 'Data restoration failed', 'danger');
+    } catch (err: any) {
+      addToast(err.message || 'Data restoration failed', 'danger');
     }
     setConfirmType(null);
     setRestorePayload(null);
   };
 
   const handleExportCSV = async () => {
-    const res = await exportCSVAction(exportMonth);
-    if (!res.success || !res.data) {
-      addToast(res.error || 'Failed to generate CSV export', 'danger');
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      addToast('User session not found', 'danger');
       return;
     }
 
-    const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = exportMonth === 'lifetime'
-      ? `Spendly_Report_AllTime_${new Date().toISOString().split('T')[0]}.csv`
-      : `Spendly_Report_${exportMonth}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('CSV Statement downloaded successfully.', 'success');
+    try {
+      const csvData = await exportService.exportCSV(userId, exportMonth);
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        exportMonth === 'lifetime'
+          ? `Spendly_Report_AllTime_${new Date().toISOString().split('T')[0]}.csv`
+          : `Spendly_Report_${exportMonth}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast('CSV Statement downloaded successfully.', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Failed to generate CSV export', 'danger');
+    }
   };
 
   const handleExportHTML = async () => {
-    const res = await exportHTMLAction(exportMonth);
-    if (!res.success || !res.data) {
-      addToast(res.error || 'Failed to generate statement HTML', 'danger');
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      addToast('User session not found', 'danger');
       return;
     }
 
-    const blob = new Blob([res.data], { type: 'text/html;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = exportMonth === 'lifetime'
-      ? `Spendly_Statement_AllTime_${new Date().toISOString().split('T')[0]}.html`
-      : `Spendly_Statement_${exportMonth}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('Printable statement generated successfully.', 'success');
+    try {
+      const htmlData = await exportService.exportHTML(userId, exportMonth);
+      const blob = new Blob([htmlData], { type: 'text/html;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        exportMonth === 'lifetime'
+          ? `Spendly_Statement_AllTime_${new Date().toISOString().split('T')[0]}.html`
+          : `Spendly_Statement_${exportMonth}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast('Printable statement generated successfully.', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Failed to generate statement HTML', 'danger');
+    }
   };
 
   const handleConfirmDangerAction = async () => {
@@ -207,7 +227,7 @@ export default function BackupsSettingsPage() {
       <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm space-y-4">
         <h2 className="text-xs font-bold text-[#111111] uppercase tracking-wider">Export Statements</h2>
         
-        {/* Month Picker */}
+        {/* Period selection */}
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-[#707070] uppercase">Select Period</label>
           <select

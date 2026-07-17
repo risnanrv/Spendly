@@ -1,15 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { getDashboardAction } from '@/actions/dashboard';
+import { dashboardService } from '@/lib/services';
+import { auth } from '@/firebase/config';
 
 export function useDashboard(monthStr: string) {
+  const userId = auth.currentUser?.uid;
+
   return useQuery({
-    queryKey: ['dashboard', monthStr],
+    queryKey: ['dashboard', userId, monthStr],
     queryFn: async () => {
-      const response = await getDashboardAction(monthStr);
-      if (!response.success) {
-        throw new Error(response.error);
-      }
-      return response.data;
+      if (!userId) return null;
+      return dashboardService.getDashboardData(userId, monthStr);
     },
+    enabled: !!userId,
   });
 }

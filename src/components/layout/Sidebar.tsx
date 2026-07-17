@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
+import { Logo } from '@/components/ui/Logo';
 import {
   LayoutDashboard,
   Receipt,
@@ -35,9 +36,7 @@ export function Sidebar() {
       <div className="flex flex-col">
         {/* Header / Brand Logo */}
         <div className="h-16 flex items-center gap-3 px-6 border-b border-[#EAEAEA]">
-          <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center shadow-sm">
-            <span className="text-lg font-black tracking-tighter text-white">S</span>
-          </div>
+          <Logo className="w-6.5 h-6.5" />
           <span className="font-extrabold tracking-tight text-lg text-[#111111]">Spendly</span>
         </div>
 

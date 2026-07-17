@@ -43,25 +43,24 @@ interface ReportChartsProps {
 }
 
 export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProps) {
-  // 1. Doughnut Category Allocation data
+  // Grayscale colors for category Doughnut slice allocation
   const doughnutData = {
     labels: categoryBreakdown.map((c) => c.name),
     datasets: [
       {
         data: categoryBreakdown.map((c) => c.amount / 100),
-        backgroundColor: categoryBreakdown.map((c) => {
-          if (c.color === 'indigo') return '#4F46E5';
-          if (c.color === 'emerald') return '#10B981';
-          if (c.color === 'orange') return '#F97316';
-          if (c.color === 'purple') return '#8B5CF6';
-          if (c.color === 'red') return '#EF4444';
-          if (c.color === 'pink') return '#EC4899';
-          if (c.color === 'violet') return '#8B5CF6';
-          if (c.color === 'cyan') return '#06B6D4';
-          if (c.color === 'amber') return '#F59E0B';
-          if (c.color === 'rose') return '#F43F5E';
-          if (c.color === 'teal') return '#14B8A6';
-          return '#707070';
+        backgroundColor: categoryBreakdown.map((_, i) => {
+          const monochromePalette = [
+            '#111111', // Solid Black
+            '#2F2F2F', // Dark Gray
+            '#4F4F4F', // Medium Dark Gray
+            '#6F6F6F', // Gray
+            '#8F8F8F', // Medium Gray
+            '#AFAFAF', // Medium Light Gray
+            '#CFCFCF', // Light Gray
+            '#EAEAEA', // Very Light Gray
+          ];
+          return monochromePalette[i % monochromePalette.length];
         }),
         borderColor: '#FFFFFF',
         borderWidth: 2,
@@ -82,9 +81,14 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
             weight: 'bold' as const,
           },
           padding: 12,
+          boxWidth: 10,
+          boxHeight: 10,
         },
       },
       tooltip: {
+        backgroundColor: '#111111',
+        titleColor: '#FFFFFF',
+        bodyColor: '#FFFFFF',
         callbacks: {
           label: (context: any) => {
             const val = context.raw as number;
@@ -95,7 +99,7 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
     },
   };
 
-  // 2. Line Spending Trend data
+  // Spending Trend line configuration
   const trendData = {
     labels: dailyTrend.map((d) => d.label),
     datasets: [
@@ -103,11 +107,11 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
         label: 'Daily Spending',
         data: dailyTrend.map((d) => d.amount / 100),
         borderColor: '#111111',
-        backgroundColor: 'rgba(17, 17, 17, 0.03)',
+        backgroundColor: 'rgba(17, 17, 17, 0.04)',
         fill: true,
-        tension: 0.2,
-        pointRadius: dailyTrend.length > 15 ? 0 : 3,
-        pointHoverRadius: 5,
+        tension: 0.25,
+        pointRadius: dailyTrend.length > 15 ? 0 : 4,
+        pointHoverRadius: 6,
         pointBackgroundColor: '#111111',
         pointBorderColor: '#FFFFFF',
         pointBorderWidth: 1.5,
@@ -123,6 +127,9 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
         display: false,
       },
       tooltip: {
+        backgroundColor: '#111111',
+        titleColor: '#FFFFFF',
+        bodyColor: '#FFFFFF',
         callbacks: {
           label: (context: any) => {
             const val = context.raw as number;
@@ -147,6 +154,9 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
         grid: {
           color: '#EAEAEA',
         },
+        border: {
+          dash: [4, 4],
+        },
         ticks: {
           color: '#707070',
           font: {
@@ -160,19 +170,19 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
-      {/* Category Allocation share */}
+      {/* Category allocations chart */}
       <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm flex flex-col h-[300px]">
-        <h3 className="text-sm font-bold text-[#111111] uppercase tracking-wider mb-4">
-          Category Allocations
+        <h3 className="text-xs font-bold text-[#111111] uppercase tracking-wider mb-4">
+          Category Allocation
         </h3>
         <div className="flex-1 relative min-h-0">
           <Doughnut data={doughnutData} options={doughnutOptions} />
         </div>
       </div>
 
-      {/* Daily trend line chart */}
+      {/* Spending Trend line chart */}
       <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm flex flex-col h-[300px]">
-        <h3 className="text-sm font-bold text-[#111111] uppercase tracking-wider mb-4">
+        <h3 className="text-xs font-bold text-[#111111] uppercase tracking-wider mb-4">
           Spending Trend
         </h3>
         <div className="flex-1 relative min-h-0">

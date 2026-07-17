@@ -1,62 +1,36 @@
-import { db } from '../../lib/db';
-import { settings } from '../schema';
-import { eq, and } from 'drizzle-orm';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import { logger } from '@/utils/logger';
 import type { ISettingsRepository } from './interfaces';
 
 export class SettingsRepository implements ISettingsRepository {
   public async get(userId: string, key: string): Promise<string | null> {
-    const results = await db
-      .select()
-      .from(settings)
-      .where(
-        and(
-          eq(settings.userId, userId),
-          eq(settings.key, key)
-        )
-      )
-      .limit(1);
-    
-    return results.length > 0 ? results[0].value : null;
+    logger.debug(`SettingsRepository: Reading key "${key}" inside Firestore settings for user ${userId}`);
+    const docRef = doc(db, 'settings', userId);
+    const snap = await getDoc(docRef);
+
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    return data[key] !== undefined ? String(data[key]) : null;
   }
 
   public async set(userId: string, key: string, value: string, tx?: any): Promise<void> {
-    const runInTx = async (executor: any) => {
-      const now = new Date();
-      logger.debug(`SettingsRepository: Setting value for key: ${key} for user ${userId}`);
+    logger.debug(`SettingsRepository: Writing key "${key}" to "${value}" inside Firestore settings for user ${userId}`);
+    const docRef = doc(db, 'settings', userId);
 
-      const existing = await executor
-        .select()
-        .from(settings)
-        .where(
-          and(
-            eq(settings.userId, userId),
-            eq(settings.key, key)
-          )
-        )
-        .limit(1);
-
-      if (existing.length > 0) {
-        await executor
-          .update(settings)
-          .set({ value, updatedAt: now })
-          .where(
-            and(
-              eq(settings.userId, userId),
-              eq(settings.key, key)
-            )
-          );
-      } else {
-        await executor.insert(settings).values({
-          userId,
-          key,
-          value,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    };
-
-    tx ? await runInTx(tx) : await db.transaction(async (innerTx) => runInTx(innerTx));
+    await setDoc(
+      docRef,
+      {
+        [key]: value,
+        userId,
+        updatedAt: Timestamp.fromDate(new Date()),
+      },
+      { merge: true }
+    );
   }
 }
