@@ -27,7 +27,7 @@ ChartJS.register(
   Filler
 );
 
-interface ReportChartsProps {
+interface CategoryAllocationChartProps {
   categoryBreakdown: Array<{
     categoryId: string;
     name: string;
@@ -35,33 +35,48 @@ interface ReportChartsProps {
     amount: number;
     percentage: number;
   }>;
+}
+
+interface SpendingTrendChartProps {
   dailyTrend: Array<{
     label: string;
     amount: number;
-    date?: string;
   }>;
 }
 
-export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProps) {
-  // Ultra-premium monochrome gray scale
+const getColorHex = (colorName: string): string => {
+  const map: Record<string, string> = {
+    black: '#0A0A0A',
+    gray: '#6B7280',
+    red: '#EF4444',
+    orange: '#F97316',
+    amber: '#F59E0B',
+    yellow: '#EAB308',
+    lime: '#84CC16',
+    green: '#22C55E',
+    emerald: '#10B981',
+    teal: '#14B8A6',
+    cyan: '#06B6D4',
+    sky: '#0EA5E9',
+    blue: '#3B82F6',
+    indigo: '#6366F1',
+    violet: '#8B5CF6',
+    purple: '#A855F7',
+    pink: '#EC4899',
+    rose: '#F43F5E',
+    brown: '#A16207',
+    slate: '#64748B',
+  };
+  return map[colorName] || '#64748B';
+};
+
+export function CategoryAllocationChart({ categoryBreakdown }: CategoryAllocationChartProps) {
   const doughnutData = {
     labels: categoryBreakdown.map((c) => c.name),
     datasets: [
       {
         data: categoryBreakdown.map((c) => c.amount / 100),
-        backgroundColor: categoryBreakdown.map((_, i) => {
-          const monochromePalette = [
-            '#0A0A0A', // True Black
-            '#262626', // Near Black
-            '#404040', // Deep Gray
-            '#525252', 
-            '#737373', 
-            '#A3A3A3', // Muted Gray
-            '#D4D4D4', // Light Gray
-            '#E5E5E5', // Very Light Gray
-          ];
-          return monochromePalette[i % monochromePalette.length];
-        }),
+        backgroundColor: categoryBreakdown.map((c) => getColorHex(c.color)),
         borderColor: '#FFFFFF',
         borderWidth: 3,
         hoverOffset: 4,
@@ -72,7 +87,7 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
   const doughnutOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '80%', // Thin elegant ring
+    cutout: '80%',
     plugins: {
       legend: {
         position: 'bottom' as const,
@@ -105,7 +120,19 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
     },
   };
 
-  // Line trend chart data
+  return (
+    <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col h-[320px]">
+      <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-4">
+        Category Allocation
+      </span>
+      <div className="flex-1 relative min-h-0">
+        <Doughnut data={doughnutData} options={doughnutOptions} />
+      </div>
+    </div>
+  );
+}
+
+export function SpendingTrendChart({ dailyTrend }: SpendingTrendChartProps) {
   const trendData = {
     labels: dailyTrend.map((d) => d.label),
     datasets: [
@@ -182,28 +209,38 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
     },
   };
 
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
-      {/* Category breakdown (Donut ring) */}
-      <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col h-[320px]">
-        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-4">
-          Breakdown
-        </span>
-        <div className="flex-1 relative min-h-0">
-          <Doughnut data={doughnutData} options={doughnutOptions} />
-        </div>
+    <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col h-[320px]">
+      <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-4">
+        Spending Trend
+      </span>
+      <div className="flex-1 relative min-h-0">
+        <Line data={trendData} options={trendOptions} />
       </div>
+    </div>
+  );
+}
 
-      {/* Spending Trend (Minimal curve) */}
-      <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col h-[320px]">
-        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-4">
-          Spending Curve
-        </span>
-        <div className="flex-1 relative min-h-0">
-          <Line data={trendData} options={trendOptions} />
-        </div>
-      </div>
+// Keep original ReportCharts for compatibility
+interface ReportChartsProps {
+  categoryBreakdown: Array<{
+    categoryId: string;
+    name: string;
+    color: string;
+    amount: number;
+    percentage: number;
+  }>;
+  dailyTrend: Array<{
+    label: string;
+    amount: number;
+  }>;
+}
+
+export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProps) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <CategoryAllocationChart categoryBreakdown={categoryBreakdown} />
+      <SpendingTrendChart dailyTrend={dailyTrend} />
     </div>
   );
 }

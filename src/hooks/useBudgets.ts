@@ -68,9 +68,7 @@ export function useSaveBudget() {
       const userId = auth.currentUser?.uid;
       if (!userId) throw new Error('Unauthorized');
 
-      // convert to cents
-      const amountCents = Math.round(amount * 100);
-      return budgetService.saveBudget(userId, monthStr, amountCents);
+      return budgetService.saveBudget(userId, monthStr, amount);
     },
     onSuccess: (_, variables) => {
       const userId = auth.currentUser?.uid;

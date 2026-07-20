@@ -7,6 +7,7 @@ import { expenseSchema, type ExpenseInput } from '@/utils/validation';
 import { useCategories } from '@/hooks/useCategories';
 import { useCreateExpense, useUpdateExpense, useExpenses } from '@/hooks/useExpenses';
 import { Loader2, X } from 'lucide-react';
+import { toDisplayAmount, toStorageAmount } from '@/utils/currency';
 
 interface ExpenseDialogProps {
   isOpen: boolean;
@@ -73,8 +74,8 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
   useEffect(() => {
     if (isOpen) {
       if (expenseToEdit) {
-        setValue('title', expenseToEdit.title);
-        setValue('amount', expenseToEdit.amount / 100); // Display as decimal float
+        setValue('title', expenseToEdit.title || '');
+        setValue('amount', toDisplayAmount(expenseToEdit.amount)); // Display as decimal float
         setValue('categoryId', expenseToEdit.categoryId);
         setValue('dateStr', new Date(expenseToEdit.date).toISOString().split('T')[0]);
         setValue('note', expenseToEdit.note || '');
@@ -91,14 +92,14 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
   }, [isOpen, expenseToEdit, setValue, reset, sortedCategories]);
 
   const onSubmit = async (data: ExpenseInput) => {
-    const amountCents = Math.round(data.amount * 100);
+    const amountCents = toStorageAmount(data.amount);
 
     try {
       if (isEdit && expenseToEdit) {
         await updateMutation.mutateAsync({
           id: expenseToEdit.id,
           data: {
-            title: data.title,
+            title: data.title || '',
             amount: amountCents,
             categoryId: data.categoryId,
             dateStr: data.dateStr,
@@ -107,7 +108,7 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
         });
       } else {
         await createMutation.mutateAsync({
-          title: data.title,
+          title: data.title || '',
           amount: amountCents,
           categoryId: data.categoryId,
           dateStr: data.dateStr,

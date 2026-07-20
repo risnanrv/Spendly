@@ -10,17 +10,14 @@ export class ExpenseService {
   constructor(private expenseRepo: IExpenseRepository) {}
 
   public async createExpense(userId: string, data: ExpenseInsert, tx?: any): Promise<Expense> {
-    const title = (data.title || '').trim();
-    const note = data.note ? data.note.trim() : undefined;
+    const title = data.title?.trim() ? data.title.trim() : null;
+    const note = data.note?.trim() ? data.note.trim() : null;
     const amount = Math.floor(data.amount); // Force integer cents
 
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    if (!title) {
-      throw new Error('Expense title is required.');
-    }
-    if (title.length > 80) {
+    if (title && title.length > 80) {
       throw new Error('Expense title cannot exceed 80 characters.');
     }
     if (amount <= 0) {
@@ -44,10 +41,8 @@ export class ExpenseService {
       amount,
       categoryId: data.categoryId,
       date: data.date,
+      note,
     };
-    if (note !== undefined) {
-      insertData.note = note;
-    }
 
     return this.expenseRepo.createExpense(userId, insertData, tx);
   }
@@ -65,12 +60,11 @@ export class ExpenseService {
       throw new Error('Invalid expense identifier.');
     }
 
-    const title = data.title !== undefined ? data.title.trim() : undefined;
-    const note = data.note !== undefined ? (data.note ? data.note.trim() : '') : undefined;
+    const title = data.title !== undefined ? (data.title?.trim() ? data.title.trim() : null) : undefined;
+    const note = data.note !== undefined ? (data.note?.trim() ? data.note.trim() : null) : undefined;
     const amount = data.amount !== undefined ? Math.floor(data.amount) : undefined;
 
-    if (title !== undefined) {
-      if (!title) throw new Error('Expense title is required.');
+    if (title !== undefined && title !== null) {
       if (title.length > 80) throw new Error('Expense title cannot exceed 80 characters.');
     }
     if (amount !== undefined && amount <= 0) {

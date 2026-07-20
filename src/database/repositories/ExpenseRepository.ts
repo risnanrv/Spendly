@@ -180,7 +180,7 @@ export class ExpenseRepository implements IExpenseRepository {
       // Filter by Search Query
       if (options.search && options.search.trim().length > 0) {
         const term = options.search.toLowerCase().trim();
-        const titleMatch = exp.title.toLowerCase().includes(term);
+        const titleMatch = exp.title ? exp.title.toLowerCase().includes(term) : false;
         const noteMatch = exp.note ? exp.note.toLowerCase().includes(term) : false;
         if (!titleMatch && !noteMatch) return;
       }

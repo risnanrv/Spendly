@@ -10,7 +10,7 @@ import { Edit3, Trash2 } from 'lucide-react';
 
 interface ExpenseCardProps {
   id?: string;
-  title: string;
+  title: string | null;
   note: string | null;
   amount: number; // Integer cents
   categoryId: string;
@@ -88,7 +88,7 @@ export function ExpenseCard({
       {/* Amount and Hover Actions container */}
       <div className="flex items-center gap-3 shrink-0 relative">
         <span className="text-xs font-bold text-[#0A0A0A] group-hover:opacity-0 transition-opacity duration-150">
-          -₹{formatAmount(amount)}
+          -{formatAmount(amount)}
         </span>
 
         {/* Sliding hover actions on Desktop */}

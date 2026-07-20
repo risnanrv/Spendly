@@ -7,6 +7,7 @@ import { budgetSchema, type BudgetInput } from '@/utils/validation';
 import { useSaveBudget } from '@/hooks/useBudgets';
 import { getMonthName } from '@/utils/date';
 import { Loader2, X } from 'lucide-react';
+import { toDisplayAmount, toStorageAmount } from '@/utils/currency';
 
 interface BudgetDialogProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export function BudgetDialog({ isOpen, onClose, monthStr, currentAmount }: Budge
   useEffect(() => {
     if (isOpen) {
       if (currentAmount > 0) {
-        setValue('amount', currentAmount / 100); // Decimals representation
+        setValue('amount', toDisplayAmount(currentAmount)); // Decimals representation
       } else {
         setValue('amount', undefined as any);
       }
@@ -41,7 +42,7 @@ export function BudgetDialog({ isOpen, onClose, monthStr, currentAmount }: Budge
   }, [isOpen, currentAmount, setValue]);
 
   const onSubmit = async (data: BudgetInput) => {
-    const amountCents = Math.round(data.amount * 100);
+    const amountCents = toStorageAmount(data.amount);
     try {
       await saveMutation.mutateAsync({
         monthStr,
@@ -83,7 +84,7 @@ export function BudgetDialog({ isOpen, onClose, monthStr, currentAmount }: Budge
             <input
               id="budget-amount"
               type="number"
-              step="1"
+              step="0.01"
               placeholder="e.g. 35000"
               className="w-full px-4 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-lg text-sm text-[#111111] focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors"
               {...register('amount')}

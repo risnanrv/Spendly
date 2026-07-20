@@ -60,9 +60,10 @@ export const resetPasswordSchema = z
 export const expenseSchema = z.object({
   title: z
     .string()
-    .min(1, 'Title is required')
     .max(80, 'Title cannot exceed 80 characters')
-    .trim(),
+    .trim()
+    .optional()
+    .or(z.literal('')),
   amount: z.preprocess(
     (val) => (typeof val === 'string' ? parseFloat(val) : val),
     z.number().positive('Amount must be greater than zero').max(9999999, 'Amount is too large')

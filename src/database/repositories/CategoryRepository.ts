@@ -7,6 +7,7 @@ import {
   where,
   setDoc,
   updateDoc,
+  deleteDoc,
   writeBatch,
   Timestamp,
 } from 'firebase/firestore';
@@ -44,6 +45,14 @@ export function mapDocToCategory(docSnap: any): Category {
   };
 }
 
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export class CategoryRepository implements ICategoryRepository {
   public static clearCache(userId?: string): void {
     // Left for interface signature compatibility.
@@ -56,9 +65,10 @@ export class CategoryRepository implements ICategoryRepository {
     const seededCategories: Category[] = [];
 
     for (const cat of DEFAULT_CATEGORIES) {
-      const docRef = doc(collection(db, 'categories'));
+      const uuid = generateUUID();
+      const docRef = doc(db, 'categories', uuid);
       const categoryData = {
-        id: docRef.id,
+        id: uuid,
         userId,
         name: cat.name,
         icon: cat.icon,
@@ -89,6 +99,75 @@ export class CategoryRepository implements ICategoryRepository {
     return seededCategories;
   }
 
+  private async migrateLegacyCategories(userId: string, categories: Category[]): Promise<Category[]> {
+    logger.info(`CategoryRepository: Migrating legacy categories for user ${userId} to UUIDs`);
+    const migratedList: Category[] = [];
+
+    for (const cat of categories) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cat.id);
+      if (isUuid) {
+        migratedList.push(cat);
+        continue;
+      }
+
+      // Generate new UUID
+      const newUuid = generateUUID();
+      logger.info(`CategoryRepository: Migrating legacy category "${cat.name}" (${cat.id} -> ${newUuid})`);
+
+      // 1. Create new category document
+      const now = new Date();
+      const newRef = doc(db, 'categories', newUuid);
+      await setDoc(newRef, {
+        id: newUuid,
+        userId,
+        name: cat.name,
+        icon: cat.icon,
+        color: cat.color,
+        type: cat.type,
+        isSystem: cat.isSystem,
+        createdAt: Timestamp.fromDate(cat.createdAt),
+        updatedAt: Timestamp.fromDate(now),
+        deletedAt: cat.deletedAt ? Timestamp.fromDate(cat.deletedAt) : null,
+      });
+
+      // 2. Query and update all expenses belonging to this category
+      const expQuery = query(
+        collection(db, 'expenses'),
+        where('userId', '==', userId),
+        where('categoryId', '==', cat.id)
+      );
+      const expSnap = await getDocs(expQuery);
+      
+      if (!expSnap.empty) {
+        const expDocs = expSnap.docs;
+        for (let i = 0; i < expDocs.length; i += 400) {
+          const batch = writeBatch(db);
+          const chunk = expDocs.slice(i, i + 400);
+          chunk.forEach((expDoc) => {
+            batch.update(doc(db, 'expenses', expDoc.id), {
+              categoryId: newUuid,
+              updatedAt: Timestamp.fromDate(now),
+            });
+          });
+          await batch.commit();
+        }
+      }
+
+      // 3. Delete old category document
+      const oldRef = doc(db, 'categories', cat.id);
+      await deleteDoc(oldRef);
+      
+      migratedList.push({
+        ...cat,
+        id: newUuid,
+        updatedAt: now,
+      });
+    }
+
+    logger.info(`CategoryRepository: Completed migrating legacy categories to UUIDs`);
+    return migratedList;
+  }
+
   public async getCategories(userId: string): Promise<Category[]> {
     const q = query(
       collection(db, 'categories'),
@@ -102,12 +181,22 @@ export class CategoryRepository implements ICategoryRepository {
     }
 
     const results: Category[] = [];
+    let needsMigration = false;
+
     snap.forEach((docSnap) => {
       const cat = mapDocToCategory(docSnap);
       if (!cat.deletedAt) {
         results.push(cat);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cat.id);
+        if (!isUuid) {
+          needsMigration = true;
+        }
       }
     });
+
+    if (needsMigration) {
+      return this.migrateLegacyCategories(userId, results);
+    }
 
     return results;
   }
@@ -127,11 +216,12 @@ export class CategoryRepository implements ICategoryRepository {
     tx?: any
   ): Promise<Category> {
     logger.debug(`CategoryRepository: Creating custom category inside Firestore for user ${userId}`);
-    const docRef = doc(collection(db, 'categories'));
+    const uuid = generateUUID();
+    const docRef = doc(db, 'categories', uuid);
     const now = new Date();
 
     const insertValues = {
-      id: docRef.id,
+      id: uuid,
       userId,
       name: data.name.trim(),
       icon: data.icon.trim(),
@@ -211,18 +301,32 @@ export class CategoryRepository implements ICategoryRepository {
       where('categoryId', '==', sourceCategoryId)
     );
     const snap = await getDocs(q);
-    const batch = writeBatch(db);
+    
+    let batch = writeBatch(db);
+    let count = 0;
+    const promises = [];
 
-    snap.forEach((docSnap) => {
+    for (const docSnap of snap.docs) {
       const expenseData = docSnap.data();
       if (!expenseData.deletedAt) {
         batch.update(docSnap.ref, {
           categoryId: targetCategoryId,
           updatedAt: Timestamp.fromDate(new Date()),
         });
-      }
-    });
+        count++;
 
-    await batch.commit();
+        if (count >= 400) {
+          promises.push(batch.commit());
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+    }
+
+    if (count > 0) {
+      promises.push(batch.commit());
+    }
+
+    await Promise.all(promises);
   }
 }

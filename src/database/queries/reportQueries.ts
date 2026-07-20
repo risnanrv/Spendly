@@ -7,7 +7,7 @@ export interface RawExpenseRow {
   id: string;
   amount: number;
   categoryId: string;
-  title: string;
+  title: string | null;
   note: string | null;
   date: Date;
   categoryName: string;

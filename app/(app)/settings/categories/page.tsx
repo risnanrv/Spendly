@@ -123,7 +123,7 @@ export default function CategoriesSettingsPage() {
               <div className="flex items-center gap-3 shrink-0 relative pr-1">
                 <div className="flex flex-col items-end group-hover:opacity-0 transition-opacity duration-150">
                   <span className="text-xs font-bold text-[#0A0A0A] leading-none">
-                    ₹{formatAmount(cat.totalSpent || 0)}
+                    {formatAmount(cat.totalSpent || 0)}
                   </span>
                   <span className="text-[8px] text-[#6B6B6B] uppercase font-bold tracking-wider mt-1 leading-none">
                     Lifetime

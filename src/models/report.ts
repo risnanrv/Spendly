@@ -137,7 +137,7 @@ export interface ChartDataset {
 
 export interface RecentTransaction {
   id: string;
-  title: string;
+  title: string | null;
   amount: number;
   categoryName: string;
   categoryIcon: string;

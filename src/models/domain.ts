@@ -23,7 +23,7 @@ export interface Expense {
   id: string; // UUID
   amount: number; // Stored as integer (cents/paisa)
   categoryId: string;
-  title: string;
+  title: string | null;
   note: string | null;
   date: Date;
   createdAt: Date;

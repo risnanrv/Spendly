@@ -3,16 +3,16 @@ import type { Expense, Category, MonthlyBudget } from '@/models/domain';
 export interface ExpenseInsert {
   amount: number; // Stored as integer cents inside database
   categoryId: string;
-  title: string;
-  note?: string | undefined;
+  title: string | null;
+  note?: string | null | undefined;
   date: Date;
 }
 
 export interface ExpenseUpdate {
   amount?: number | undefined;
   categoryId?: string | undefined;
-  title?: string | undefined;
-  note?: string | undefined;
+  title?: string | null | undefined;
+  note?: string | null | undefined;
   date?: Date | undefined;
 }
 

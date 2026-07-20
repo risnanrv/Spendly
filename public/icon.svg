@@ -1,7 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?>
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <!-- Base premium black rounded square -->
-  <rect width="512" height="512" rx="128" fill="#111111"/>
-  <!-- Abstract geometric ribbon representing financial flow / letter "S" -->
-  <path d="M 192,128 H 384 V 192 H 288 L 192,288 V 384 H 128 V 320 H 224 L 320,224 V 128 Z" fill="#FFFFFF"/>
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="150" fill="#0A0A0A" />
+  <path
+    d="M160 176 C160 115, 352 115, 352 190 C352 235, 290 248, 256 256 C210 266, 160 280, 160 336 C160 400, 352 395, 352 336"
+    stroke="#FFFFFF"
+    strokeWidth="58"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    fill="none"
+  />
 </svg>

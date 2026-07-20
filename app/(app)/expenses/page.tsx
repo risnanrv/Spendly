@@ -7,7 +7,7 @@ import { expenseSchema, type ExpenseInput } from '@/utils/validation';
 import { useExpenses, useCreateExpense, useDeleteExpense } from '@/hooks/useExpenses';
 import { useCategories } from '@/hooks/useCategories';
 import { getMonthStr, getMonthName } from '@/utils/date';
-import { formatAmount } from '@/utils/currency';
+import { formatAmount, toStorageAmount } from '@/utils/currency';
 import { CategoryIcon } from '@/components/ui/CategoryIcon';
 import { ExpenseCard } from '@/components/ExpenseCard';
 import { ExpenseDialog } from '@/components/expenses/ExpenseDialog';
@@ -42,7 +42,6 @@ export default function ExpensesPage() {
   // Form State
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [categorySearch, setCategorySearch] = useState('');
-  const [displayAmount, setDisplayAmount] = useState('');
   const amountInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State for EDITING
@@ -118,7 +117,7 @@ export default function ExpensesPage() {
   // Set default category when list loads
   useEffect(() => {
     if (sortedCategories.length > 0 && !selectedCategoryId) {
-      setValue('categoryId', sortedCategories[0].id);
+      setValue('categoryId', sortedCategories[0].id, { shouldValidate: true });
     }
   }, [sortedCategories, setValue, selectedCategoryId]);
 
@@ -129,34 +128,11 @@ export default function ExpensesPage() {
     }
   }, []);
 
-  // Format helper for amount entry (CashApp / Revolut style)
-  const formatAmountInput = (val: string) => {
-    const digits = val.replace(/\D/g, '');
-    if (!digits) return '';
-    const cents = parseInt(digits, 10);
-    const rupees = cents / 100;
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(rupees);
-  };
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value;
-    const formatted = formatAmountInput(rawVal);
-    setDisplayAmount(formatted);
-
-    const digits = rawVal.replace(/\D/g, '');
-    const numericVal = digits ? parseInt(digits, 10) / 100 : 0;
-    setValue('amount', numericVal, { shouldValidate: true });
-  };
-
   const onAddExpense = async (data: ExpenseInput) => {
-    const amountCents = Math.round(data.amount * 100);
+    const amountCents = toStorageAmount(data.amount);
     try {
       await createMutation.mutateAsync({
-        title: data.title,
+        title: data.title || '',
         amount: amountCents,
         categoryId: data.categoryId,
         dateStr: data.dateStr,
@@ -171,7 +147,6 @@ export default function ExpensesPage() {
         dateStr: new Date().toISOString().split('T')[0],
         note: '',
       });
-      setDisplayAmount('');
       setShowAdvanced(false);
       setCategorySearch('');
       if (amountInputRef.current) {
@@ -267,15 +242,20 @@ export default function ExpensesPage() {
         <form onSubmit={handleSubmit(onAddExpense)} className="space-y-6">
           {/* Amount input: HERO Element */}
           <div className="flex flex-col items-center justify-center py-2 space-y-1">
-            <div className="relative w-full max-w-xs flex items-center justify-center">
+            <div className="relative w-full max-w-xs flex items-center justify-center font-black text-4xl md:text-5xl text-[#0A0A0A]">
+              <span className="mr-1 select-none">₹</span>
               <input
-                ref={amountInputRef}
-                type="text"
-                placeholder="₹0.00"
-                value={displayAmount}
-                onChange={handleAmountChange}
+                type="number"
+                step="any"
+                placeholder="0"
+                className="w-48 text-left focus:outline-none bg-transparent select-all"
+                {...register('amount', { valueAsNumber: true })}
+                ref={(e) => {
+                  register('amount').ref(e);
+                  // @ts-ignore
+                  amountInputRef.current = e;
+                }}
                 disabled={formSubmitting}
-                className="w-full text-4xl md:text-5xl font-black text-center text-[#0A0A0A] placeholder-neutral-300 focus:outline-none bg-transparent select-all"
               />
             </div>
             {formErrors.amount && (

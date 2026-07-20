@@ -49,24 +49,22 @@ export function useCreateExpense() {
 
   return useMutation({
     mutationFn: async (data: {
-      title: string;
+      title: string | null;
       amount: number;
       categoryId: string;
       dateStr: string;
-      note?: string;
+      note?: string | null;
     }) => {
       const userId = auth.currentUser?.uid;
       if (!userId) throw new Error('Unauthorized');
 
       const insertData: ExpenseInsert = {
-        title: data.title,
+        title: data.title?.trim() ? data.title.trim() : null,
         amount: data.amount,
         categoryId: data.categoryId,
         date: new Date(data.dateStr),
+        note: data.note?.trim() ? data.note.trim() : null,
       };
-      if (data.note) {
-        insertData.note = data.note;
-      }
 
       return expenseService.createExpense(userId, insertData);
     },
@@ -94,22 +92,22 @@ export function useUpdateExpense() {
     }: {
       id: string;
       data: {
-        title?: string;
+        title?: string | null;
         amount?: number;
         categoryId?: string;
         dateStr?: string;
-        note?: string;
+        note?: string | null;
       };
     }) => {
       const userId = auth.currentUser?.uid;
       if (!userId) throw new Error('Unauthorized');
 
       const updateData: ExpenseUpdate = {};
-      if (data.title !== undefined) updateData.title = data.title;
+      if (data.title !== undefined) updateData.title = data.title?.trim() ? data.title.trim() : null;
       if (data.amount !== undefined) updateData.amount = data.amount;
       if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
       if (data.dateStr !== undefined) updateData.date = new Date(data.dateStr);
-      if (data.note !== undefined) updateData.note = data.note;
+      if (data.note !== undefined) updateData.note = data.note?.trim() ? data.note.trim() : null;
 
       return expenseService.updateExpense(userId, id, updateData);
     },

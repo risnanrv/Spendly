@@ -1,21 +1,25 @@
 // Curated Spendly design system color tokens
 export const CURATED_COLORS = [
-  'indigo',     // brandPrimary
-  'orange',
-  'blue',
-  'purple',
-  'red',
-  'pink',
-  'emerald',    // green
-  'violet',
-  'cyan',
-  'amber',
-  'slate',
-  'rose',
-  'teal',
-  'yellow',
-  'lightBlue',
+  'black',
   'gray',
+  'red',
+  'orange',
+  'amber',
+  'yellow',
+  'lime',
+  'green',
+  'emerald',
+  'teal',
+  'cyan',
+  'sky',
+  'blue',
+  'indigo',
+  'violet',
+  'purple',
+  'pink',
+  'rose',
+  'brown',
+  'slate',
 ] as const;
 
 // Curated Lucide icons list for Category Pickers

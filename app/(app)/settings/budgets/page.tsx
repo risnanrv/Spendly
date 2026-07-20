@@ -124,10 +124,10 @@ export default function BudgetsSettingsPage() {
                 </span>
                 <div className="flex items-baseline gap-1.5 mt-2">
                   <span className="text-2xl font-black text-[#0A0A0A]">
-                    ₹{formatAmount(details.spent)}
+                    {formatAmount(details.spent)}
                   </span>
                   <span className="text-xs text-[#6B6B6B]">
-                    of ₹{formatAmount(details.budget)}
+                    of {formatAmount(details.budget)}
                   </span>
                 </div>
               </div>
@@ -159,7 +159,7 @@ export default function BudgetsSettingsPage() {
                 />
               </div>
               <div className="flex justify-between text-[10px] font-semibold text-[#6B6B6B]">
-                <span>Remaining: ₹{formatAmount(details.remaining)}</span>
+                <span>Remaining: {formatAmount(details.remaining)}</span>
                 <span>{remainingDays} days left</span>
               </div>
             </div>
@@ -222,7 +222,7 @@ export default function BudgetsSettingsPage() {
                       {new Date(item.month + '-02').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
                     </span>
                     <span className="text-[10px] text-[#6B6B6B] mt-1 font-medium">
-                      Spent ₹{formatAmount(item.spent)} of ₹{formatAmount(item.budget)}
+                      Spent {formatAmount(item.spent)} of {formatAmount(item.budget)}
                     </span>
                   </div>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
