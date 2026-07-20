@@ -2,8 +2,7 @@
 
 import React, { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { expenseSchema, type ExpenseInput } from '@/utils/validation';
+import { expenseSchema, zodResolver, type ExpenseInput } from '@/utils/validation';
 import { useCategories } from '@/hooks/useCategories';
 import { useCreateExpense, useUpdateExpense, useExpenses } from '@/hooks/useExpenses';
 import { Loader2, X } from 'lucide-react';
@@ -15,9 +14,9 @@ interface ExpenseDialogProps {
   expenseToEdit?: {
     id: string;
     title: string;
-    amount: number; // Integer cents
+    amount: number; // Integer paisa/cents stored in Firestore
     categoryId: string;
-    date: string;
+    date: Date | string; // Can be a Date object from Firestore or ISO string
     note: string | null;
   } | null;
 }
@@ -70,26 +69,34 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
     },
   });
 
-  // Hydrate fields if editing
+  // Hydrate form when dialog opens
   useEffect(() => {
-    if (isOpen) {
-      if (expenseToEdit) {
-        setValue('title', expenseToEdit.title || '');
-        setValue('amount', toDisplayAmount(expenseToEdit.amount)); // Display as decimal float
-        setValue('categoryId', expenseToEdit.categoryId);
-        setValue('dateStr', new Date(expenseToEdit.date).toISOString().split('T')[0]);
-        setValue('note', expenseToEdit.note || '');
-      } else {
-        reset({
-          title: '',
-          amount: undefined,
-          categoryId: sortedCategories.length > 0 ? sortedCategories[0].id : '',
-          dateStr: new Date().toISOString().split('T')[0],
-          note: '',
-        });
-      }
+    if (!isOpen) return;
+
+    if (expenseToEdit) {
+      // Edit mode — pre-fill all fields using reset() for reliable form state
+      const dateObj = expenseToEdit.date instanceof Date
+        ? expenseToEdit.date
+        : new Date(expenseToEdit.date);
+
+      reset({
+        title: expenseToEdit.title || '',
+        amount: toDisplayAmount(expenseToEdit.amount), // paisa → rupees for display
+        categoryId: expenseToEdit.categoryId,
+        dateStr: dateObj.toISOString().split('T')[0],
+        note: expenseToEdit.note || '',
+      });
+    } else {
+      // New expense — blank form, no default category
+      reset({
+        title: '',
+        amount: undefined,
+        categoryId: '',
+        dateStr: new Date().toISOString().split('T')[0],
+        note: '',
+      });
     }
-  }, [isOpen, expenseToEdit, setValue, reset, sortedCategories]);
+  }, [isOpen, expenseToEdit, reset]);
 
   const onSubmit = async (data: ExpenseInput) => {
     const amountCents = toStorageAmount(data.amount);
@@ -171,7 +178,7 @@ export function ExpenseDialog({ isOpen, onClose, expenseToEdit }: ExpenseDialogP
                 step="0.01"
                 placeholder="0.00"
                 className="w-full px-4 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-lg text-sm text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors"
-                {...register('amount')}
+                {...register('amount', { valueAsNumber: true })}
                 disabled={isSubmitting}
               />
               {errors.amount && (

@@ -2,8 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { expenseSchema, type ExpenseInput } from '@/utils/validation';
+import { expenseSchema, zodResolver, type ExpenseInput } from '@/utils/validation';
 import { useExpenses, useCreateExpense, useDeleteExpense } from '@/hooks/useExpenses';
 import { useCategories } from '@/hooks/useCategories';
 import { getMonthStr, getMonthName } from '@/utils/date';
@@ -62,10 +61,10 @@ export default function ExpensesPage() {
   // Calculate sorted categories: Most Used -> Recently Used -> Others
   const sortedCategories = useMemo(() => {
     if (!categories) return [];
-    
+
     const counts: Record<string, number> = {};
     const recency: Record<string, number> = {};
-    
+
     if (allExpenses && allExpenses.length > 0) {
       allExpenses.forEach((exp: any) => {
         const catId = exp.categoryId;
@@ -114,12 +113,7 @@ export default function ExpensesPage() {
 
   const selectedCategoryId = watch('categoryId');
 
-  // Set default category when list loads
-  useEffect(() => {
-    if (sortedCategories.length > 0 && !selectedCategoryId) {
-      setValue('categoryId', sortedCategories[0].id, { shouldValidate: true });
-    }
-  }, [sortedCategories, setValue, selectedCategoryId]);
+  // No default category — user must explicitly choose one
 
   // Auto-focus amount input on mount
   useEffect(() => {
@@ -138,12 +132,12 @@ export default function ExpensesPage() {
         dateStr: data.dateStr,
         note: data.note || undefined,
       });
-      
-      // Reset form on success
+
+      // Reset form on success — no default category
       reset({
         title: '',
         amount: undefined,
-        categoryId: sortedCategories.length > 0 ? sortedCategories[0].id : '',
+        categoryId: '',
         dateStr: new Date().toISOString().split('T')[0],
         note: '',
       });
@@ -219,15 +213,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-8 pb-12 select-none">
-      {/* Header section */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-[#0A0A0A]">
-          Expenses
-        </h1>
-        <p className="text-xs text-[#6B6B6B] mt-1">
-          Add transactions and track your history instantly.
-        </p>
-      </div>
+
 
       {/* Log Expense Form Card */}
       <motion.div
@@ -235,20 +221,24 @@ export default function ExpensesPage() {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white border border-[#E8E8E8] rounded-3xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-6"
       >
-        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider block">
-          New Entry
-        </span>
+
 
         <form onSubmit={handleSubmit(onAddExpense)} className="space-y-6">
-          {/* Amount input: HERO Element */}
+          {/* Amount input: HERO Element — ₹ and number center together as one unit */}
           <div className="flex flex-col items-center justify-center py-2 space-y-1">
-            <div className="relative w-full max-w-xs flex items-center justify-center font-black text-4xl md:text-5xl text-[#0A0A0A]">
-              <span className="mr-1 select-none">₹</span>
+            <div className="flex items-center justify-center font-black text-4xl md:text-5xl text-[#0A0A0A]">
+              <span className="select-none">₹</span>
               <input
                 type="number"
                 step="any"
                 placeholder="0"
-                className="w-48 text-left focus:outline-none bg-transparent select-all"
+                style={{
+                  // Shrink/grow with content so ₹+number centers as one unit
+                  width: `${Math.max(1, String(watch('amount') ?? '').replace(/[^0-9.]/g, '').length || 1)}ch`,
+                  minWidth: '1ch',
+                  maxWidth: '12ch',
+                }}
+                className="text-center focus:outline-none bg-transparent select-all"
                 {...register('amount', { valueAsNumber: true })}
                 ref={(e) => {
                   register('amount').ref(e);
@@ -269,7 +259,7 @@ export default function ExpensesPage() {
               <label className="text-[10px] font-semibold text-[#6B6B6B] uppercase tracking-wider">
                 Category
               </label>
-              
+
               {/* Mini category search */}
               {sortedCategories.length > 5 && (
                 <div className="relative w-36 hidden sm:block">
@@ -294,11 +284,10 @@ export default function ExpensesPage() {
                     type="button"
                     onClick={() => setValue('categoryId', cat.id, { shouldValidate: true })}
                     disabled={formSubmitting}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 border transition-all flex items-center gap-1.5 ${
-                      isSelected
-                        ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
-                        : 'bg-[#F5F5F5] border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 border transition-all flex items-center gap-1.5 ${isSelected
+                      ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                      : 'bg-[#F5F5F5] border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
+                      }`}
                   >
                     <CategoryIcon name={cat.icon} size={12} />
                     <span>{cat.name}</span>
@@ -404,10 +393,7 @@ export default function ExpensesPage() {
       {/* Divider */}
       <div className="border-t border-[#E8E8E8] my-6" />
 
-      {/* History section heading */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-[#0A0A0A]">History</h2>
-      </div>
+
 
       {/* Filters bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -446,24 +432,22 @@ export default function ExpensesPage() {
         <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-2 px-2 scrollbar-thin">
           <button
             onClick={() => setCategoryId('')}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shrink-0 border ${
-              categoryId === ''
-                ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
-                : 'bg-white border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
-            }`}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shrink-0 border ${categoryId === ''
+              ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+              : 'bg-white border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
+              }`}
           >
             All Categories
           </button>
-          
+
           {categories?.map((cat: any) => (
             <button
               key={cat.id}
               onClick={() => setCategoryId(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shrink-0 border flex items-center gap-1 ${
-                categoryId === cat.id
-                  ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
-                  : 'bg-white border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
-              }`}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shrink-0 border flex items-center gap-1 ${categoryId === cat.id
+                ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                : 'bg-white border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
+                }`}
             >
               <span>{cat.name}</span>
             </button>

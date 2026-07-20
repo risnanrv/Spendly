@@ -56,7 +56,7 @@ export class ExpenseService {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    if (!validateUUID(id)) {
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
       throw new Error('Invalid expense identifier.');
     }
 
@@ -97,7 +97,7 @@ export class ExpenseService {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    if (!validateUUID(id)) {
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
       throw new Error('Invalid expense identifier.');
     }
     return this.expenseRepo.deleteExpense(userId, id, tx);
@@ -107,7 +107,7 @@ export class ExpenseService {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    if (!validateUUID(id)) {
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
       throw new Error('Invalid expense identifier.');
     }
     return this.expenseRepo.restoreExpense(userId, id, tx);

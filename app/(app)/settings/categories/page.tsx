@@ -120,9 +120,7 @@ export default function CategoriesSettingsPage() {
                   <span className="text-xs font-bold text-[#0A0A0A] leading-none">
                     {formatAmount(cat.totalSpent || 0)}
                   </span>
-                  <span className="text-[8px] text-[#6B6B6B] uppercase font-bold tracking-wider mt-1 leading-none">
-                    Lifetime
-                  </span>
+
                 </div>
 
                 {/* Sliding Actions on Hover */}

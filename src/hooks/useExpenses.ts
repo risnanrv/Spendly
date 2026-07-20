@@ -113,9 +113,12 @@ export function useUpdateExpense() {
     },
     onSuccess: () => {
       const userId = auth.currentUser?.uid;
+      // Invalidate all expense queries (any filter combination)
       queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      // Invalidate all dependent views
       queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
       queryClient.invalidateQueries({ queryKey: ['reports', userId] });
+      queryClient.invalidateQueries({ queryKey: ['categories', userId] });
       addToast('Expense updated successfully!', 'success');
     },
     onError: (err: any) => {
@@ -137,30 +140,40 @@ export function useDeleteExpense() {
     },
     onMutate: async (id) => {
       const userId = auth.currentUser?.uid;
-      // Optimistic update for immediate visual response
+      // Cancel any in-flight expense queries to prevent race conditions
       await queryClient.cancelQueries({ queryKey: ['expenses', userId] });
-      const previousExpenses = queryClient.getQueryData(['expenses', userId]);
 
-      // Update matching list queries optimistically
-      queryClient.setQueriesData({ queryKey: ['expenses', userId] }, (old: any) => {
-        if (!old) return old;
-        return old.filter((item: any) => item.id !== id);
-      });
+      // Snapshot current data for rollback
+      const previousData = queryClient.getQueriesData({ queryKey: ['expenses', userId] });
 
-      return { previousExpenses };
+      // Optimistically remove the expense from ALL cached expense query variants
+      queryClient.setQueriesData(
+        { queryKey: ['expenses', userId], exact: false },
+        (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.filter((item: any) => item.id !== id);
+        }
+      );
+
+      return { previousData };
     },
-    onError: (err: any, id, context) => {
-      const userId = auth.currentUser?.uid;
-      if (context?.previousExpenses) {
-        queryClient.setQueriesData({ queryKey: ['expenses', userId], filters: undefined }, context.previousExpenses);
+    onError: (err: any, _id, context) => {
+      // Roll back optimistic update on error
+      if (context?.previousData) {
+        for (const [queryKey, data] of context.previousData) {
+          queryClient.setQueryData(queryKey, data);
+        }
       }
       addToast(err.message || 'Failed to delete expense', 'danger');
     },
     onSuccess: () => {
       const userId = auth.currentUser?.uid;
+      // Invalidate all expense queries (any filter combination)
       queryClient.invalidateQueries({ queryKey: ['expenses', userId] });
+      // Invalidate all dependent views
       queryClient.invalidateQueries({ queryKey: ['dashboard', userId] });
       queryClient.invalidateQueries({ queryKey: ['reports', userId] });
+      queryClient.invalidateQueries({ queryKey: ['categories', userId] });
       addToast('Expense deleted successfully.', 'success');
     },
   });

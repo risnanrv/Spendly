@@ -39,15 +39,6 @@ export default function SettingsIndexPage() {
 
   return (
     <div className="max-w-md mx-auto space-y-8 select-none pb-12">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-[#0A0A0A]">
-          Settings
-        </h1>
-        <p className="text-xs text-[#6B6B6B] mt-0.5">
-          Account profiles, target budgets, categories, and statement exports.
-        </p>
-      </div>
 
       {/* User profile Summary Card */}
       <motion.div
