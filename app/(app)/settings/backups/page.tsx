@@ -14,7 +14,8 @@ import { auth } from '@/firebase/config';
 import { getMonthStr } from '@/utils/date';
 import { useToastStore } from '@/stores/toast.store';
 import { DeleteConfirmDialog } from '@/components/expenses/DeleteConfirmDialog';
-import { ChevronLeft, Download, Upload, Printer, Trash2, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, Download, Upload, Printer, Trash2, ShieldAlert, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function BackupsSettingsPage() {
   const { addToast } = useToastStore();
@@ -25,6 +26,7 @@ export default function BackupsSettingsPage() {
   >(null);
   const [restorePayload, setRestorePayload] = useState<any>(null);
   const [exportMonth, setExportMonth] = useState<string>('lifetime');
+  const [showDanger, setShowDanger] = useState(false);
 
   const truncateExpenses = useTruncateExpenses();
   const truncateBudgets = useTruncateBudgets();
@@ -187,32 +189,34 @@ export default function BackupsSettingsPage() {
   }, []);
 
   return (
-    <div className="max-w-md mx-auto space-y-6 select-none">
+    <div className="max-w-md mx-auto space-y-6 select-none pb-12">
       {/* Back Header */}
       <div className="flex items-center gap-2">
-        <Link href="/settings" className="p-2 -ml-2 text-[#707070] hover:text-[#111111] transition-all">
+        <Link href="/settings" className="p-2 -ml-2 text-[#6B6B6B] hover:text-[#0A0A0A] transition-all">
           <ChevronLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-xl font-bold text-[#111111]">Backups & Data</h1>
+        <h1 className="text-base font-semibold text-[#0A0A0A]">Backups & Statement Exports</h1>
       </div>
 
-      {/* JSON Backup & Restore section */}
-      <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm space-y-4">
-        <h2 className="text-xs font-bold text-[#111111] uppercase tracking-wider">Database Snapshots</h2>
+      {/* Database Snapshots card */}
+      <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-4">
+        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider block">
+          Database Snapshots
+        </span>
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={handleExportJSON}
-            className="flex flex-col items-center justify-center p-4 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl hover:bg-[#EAEAEA]/30 transition-all text-center gap-2"
+            className="flex flex-col items-center justify-center p-4 bg-[#F5F5F5] border border-[#E8E8E8] rounded-2xl hover:bg-[#E8E8E8]/40 transition-all text-center gap-2"
           >
-            <Download className="h-5 w-5 text-black" />
-            <span className="text-xs font-bold text-[#111111]">Export Backup</span>
-            <span className="text-[9px] text-[#707070]">Download JSON file</span>
+            <Download className="h-5 w-5 text-[#0A0A0A]" />
+            <span className="text-xs font-semibold text-[#0A0A0A]">Export Backup</span>
+            <span className="text-[9px] text-[#6B6B6B]">Download JSON snapshot</span>
           </button>
 
-          <label className="flex flex-col items-center justify-center p-4 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl hover:bg-[#EAEAEA]/30 transition-all text-center gap-2 cursor-pointer">
-            <Upload className="h-5 w-5 text-black" />
-            <span className="text-xs font-bold text-[#111111]">Restore Backup</span>
-            <span className="text-[9px] text-[#707070]">Upload JSON file</span>
+          <label className="flex flex-col items-center justify-center p-4 bg-[#F5F5F5] border border-[#E8E8E8] rounded-2xl hover:bg-[#E8E8E8]/40 transition-all text-center gap-2 cursor-pointer">
+            <Upload className="h-5 w-5 text-[#0A0A0A]" />
+            <span className="text-xs font-semibold text-[#0A0A0A]">Restore Backup</span>
+            <span className="text-[9px] text-[#6B6B6B]">Upload JSON snapshot</span>
             <input
               type="file"
               accept=".json"
@@ -223,38 +227,43 @@ export default function BackupsSettingsPage() {
         </div>
       </div>
 
-      {/* Statement Exports Section */}
-      <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm space-y-4">
-        <h2 className="text-xs font-bold text-[#111111] uppercase tracking-wider">Export Statements</h2>
+      {/* Export Statement Section */}
+      <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-4">
+        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider block">
+          Statement Period
+        </span>
         
-        {/* Period selection */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-[#707070] uppercase">Select Period</label>
-          <select
-            value={exportMonth}
-            onChange={(e) => setExportMonth(e.target.value)}
-            className="w-full px-3 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs font-bold text-[#111111] focus:outline-none focus:border-black transition-colors"
-          >
-            <option value="lifetime">All Time (Lifetime)</option>
-            {monthOptions.map((opt: { value: string; label: string }) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+        {/* Period selection select box */}
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-bold text-[#6B6B6B] uppercase tracking-wider pl-0.5">Select Period</label>
+          <div className="relative">
+            <select
+              value={exportMonth}
+              onChange={(e) => setExportMonth(e.target.value)}
+              className="w-full pl-4 pr-10 py-3 bg-[#F5F5F5] border border-[#E8E8E8] rounded-xl text-xs font-semibold text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] appearance-none cursor-pointer"
+            >
+              <option value="lifetime">All Time (Lifetime)</option>
+              {monthOptions.map((opt: { value: string; label: string }) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6B6B6B] pointer-events-none" />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 pt-2">
           <button
             onClick={handleExportCSV}
-            className="flex items-center justify-center gap-2 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl hover:bg-[#EAEAEA]/30 text-xs font-bold text-[#111111]"
+            className="flex items-center justify-center gap-2 py-3 bg-[#F5F5F5] border border-[#E8E8E8] hover:bg-[#E8E8E8]/40 rounded-xl text-xs font-semibold text-[#0A0A0A] transition-all"
           >
             <Download className="h-4 w-4" />
             CSV Sheet
           </button>
           <button
             onClick={handleExportHTML}
-            className="flex items-center justify-center gap-2 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl hover:bg-[#EAEAEA]/30 text-xs font-bold text-[#111111]"
+            className="flex items-center justify-center gap-2 py-3 bg-[#F5F5F5] border border-[#E8E8E8] hover:bg-[#E8E8E8]/40 rounded-xl text-xs font-semibold text-[#0A0A0A] transition-all"
           >
             <Printer className="h-4 w-4" />
             Print HTML
@@ -262,43 +271,58 @@ export default function BackupsSettingsPage() {
         </div>
       </div>
 
-      {/* Danger Zone Section */}
-      <div className="bg-white border border-red-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 text-red-500">
-          <ShieldAlert className="h-5 w-5" />
-          <h2 className="text-xs font-bold uppercase tracking-wider">Danger Zone</h2>
-        </div>
+      {/* Collapsible Danger Zone Section */}
+      <div className="bg-white border border-[#E8E8E8] rounded-3xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+        <button
+          onClick={() => setShowDanger(!showDanger)}
+          className="w-full flex items-center justify-between p-5 bg-white text-red-500 font-semibold text-xs"
+        >
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4.5 w-4.5 text-red-500" />
+            <span className="uppercase tracking-wider text-[10px] font-bold">Danger Zone Actions</span>
+          </div>
+          <ChevronDown className={`h-4 w-4 text-[#6B6B6B] transition-transform ${showDanger ? 'rotate-180' : ''}`} />
+        </button>
 
-        <div className="space-y-2">
-          <button
-            onClick={() => setConfirmType('expenses')}
-            className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
-          >
-            <span>Delete All Expenses</span>
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setConfirmType('budgets')}
-            className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
-          >
-            <span>Delete All Budgets</span>
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setConfirmType('categories')}
-            className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
-          >
-            <span>Delete Custom Categories</span>
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setConfirmType('reset')}
-            className="w-full flex items-center justify-between p-3 bg-red-500 hover:bg-red-600 rounded-xl transition-all text-left text-xs font-bold text-white shadow-sm"
-          >
-            <span>Reset Complete Database</span>
-            <Trash2 className="h-4 w-4 text-white" />
-          </button>
-        </div>
+        <AnimatePresence>
+          {showDanger && (
+            <motion.div
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              exit={{ height: 0 }}
+              className="overflow-hidden bg-neutral-50/50 border-t border-[#E8E8E8] p-5 space-y-2.5"
+            >
+              <button
+                onClick={() => setConfirmType('expenses')}
+                className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
+              >
+                <span>Delete All Expenses</span>
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setConfirmType('budgets')}
+                className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
+              >
+                <span>Delete All Budgets</span>
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setConfirmType('categories')}
+                className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
+              >
+                <span>Delete Custom Categories</span>
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setConfirmType('reset')}
+                className="w-full flex items-center justify-between p-3 bg-red-500 hover:bg-red-600 rounded-xl transition-all text-left text-xs font-bold text-white shadow-sm"
+              >
+                <span>Reset Complete Database</span>
+                <Trash2 className="h-4 w-4 text-white" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Confirmation Dialogs */}

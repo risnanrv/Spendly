@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSettings } from '@/hooks/useSettings';
 import { authClient } from '@/lib/auth-client';
+import { motion } from 'framer-motion';
 import {
   User,
   PiggyBank,
@@ -12,8 +13,9 @@ import {
   Database,
   ChevronRight,
   LogOut,
-  Loader2,
+  UserCheck,
 } from 'lucide-react';
+import { SkeletonCard } from '@/components/ui/SkeletonCard';
 
 export default function SettingsIndexPage() {
   const router = useRouter();
@@ -27,121 +29,127 @@ export default function SettingsIndexPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-[#707070] gap-3 select-none">
-        <Loader2 className="h-8 w-8 animate-spin text-black" />
-        <span className="text-sm font-semibold">Loading settings...</span>
+      <div className="space-y-6 pb-12 select-none max-w-md mx-auto">
+        <div className="h-6 w-36 rounded animate-shimmer" />
+        <SkeletonCard type="card" className="h-28 w-full" />
+        <SkeletonCard type="card" className="h-44 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto space-y-6 select-none pb-12">
+    <div className="max-w-md mx-auto space-y-8 select-none pb-12">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#111111]">
+        <h1 className="text-xl font-semibold tracking-tight text-[#0A0A0A]">
           Settings
         </h1>
-        <p className="text-xs text-[#707070] mt-1">
-          Manage your account profile, budget targets, category configs, and statements.
+        <p className="text-xs text-[#6B6B6B] mt-0.5">
+          Account profiles, target budgets, categories, and statement exports.
         </p>
       </div>
 
-      {/* User profile Summary Header */}
-      <div className="bg-[#F7F7F7] border border-[#EAEAEA] rounded-2xl p-5 shadow-sm flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-white border border-[#EAEAEA] flex items-center justify-center text-black font-bold text-xl shrink-0">
-          {settingsData?.userName ? settingsData.userName[0].toUpperCase() : <User className="h-6 w-6 text-[#707070]" />}
+      {/* User profile Summary Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex items-center gap-4"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-[#0A0A0A] text-white flex items-center justify-center font-bold text-lg shrink-0">
+          {settingsData?.userName ? settingsData.userName[0].toUpperCase() : <User className="h-5 w-5 text-white" />}
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="text-base font-bold text-[#111111] leading-tight truncate">
+          <span className="text-sm font-semibold text-[#0A0A0A] leading-tight truncate">
             {settingsData?.userName || 'Spendly User'}
           </span>
-          <span className="text-xs text-[#707070] truncate mt-0.5 font-medium">
+          <span className="text-[10px] text-[#6B6B6B] truncate mt-1 leading-none font-medium">
             {settingsData?.email}
           </span>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Settings Navigation Menu */}
-      <div className="space-y-4">
-        {/* Profile */}
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-bold text-[#707070] uppercase tracking-wider pl-1">Profile</span>
-          <div className="bg-white border border-[#EAEAEA] rounded-2xl overflow-hidden shadow-sm">
+      {/* Settings Navigation Menu (Grouped rows) */}
+      <div className="space-y-6">
+        {/* Profile Group */}
+        <div className="space-y-2">
+          <span className="text-[9px] font-bold text-[#6B6B6B] uppercase tracking-widest pl-1">Profile</span>
+          <div className="bg-white border border-[#E8E8E8] rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <Link
               href="/settings/profile"
-              className="w-full flex items-center justify-between p-4 hover:bg-[#F7F7F7] transition-all"
+              className="w-full flex items-center justify-between p-4 hover:bg-[#F5F5F5] transition-all group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#F7F7F7] text-[#111111] border border-[#EAEAEA] flex items-center justify-center">
-                  <User className="h-4 w-4" />
+                <div className="w-8 h-8 rounded-xl bg-[#F5F5F5] text-[#0A0A0A] border border-[#E8E8E8] flex items-center justify-center shrink-0">
+                  <UserCheck className="h-4 w-4" />
                 </div>
-                <span className="text-sm font-bold text-[#111111]">Profile Details</span>
+                <span className="text-xs font-semibold text-[#0A0A0A]">Profile Details</span>
               </div>
-              <ChevronRight className="h-4 w-4 text-[#707070]" />
+              <ChevronRight className="h-4 w-4 text-[#6B6B6B] group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
         </div>
 
-        {/* Configurations */}
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-bold text-[#707070] uppercase tracking-wider pl-1">Configuration</span>
-          <div className="bg-white border border-[#EAEAEA] rounded-2xl overflow-hidden divide-y divide-[#EAEAEA] shadow-sm">
+        {/* Configuration Group */}
+        <div className="space-y-2">
+          <span className="text-[9px] font-bold text-[#6B6B6B] uppercase tracking-widest pl-1">Configuration</span>
+          <div className="bg-white border border-[#E8E8E8] rounded-3xl overflow-hidden divide-y divide-[#E8E8E8] shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <Link
               href="/settings/budgets"
-              className="w-full flex items-center justify-between p-4 hover:bg-[#F7F7F7] transition-all"
+              className="w-full flex items-center justify-between p-4 hover:bg-[#F5F5F5] transition-all group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#F7F7F7] text-[#111111] border border-[#EAEAEA] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-[#F5F5F5] text-[#0A0A0A] border border-[#E8E8E8] flex items-center justify-center shrink-0">
                   <PiggyBank className="h-4 w-4" />
                 </div>
-                <span className="text-sm font-bold text-[#111111]">Target Budgets</span>
+                <span className="text-xs font-semibold text-[#0A0A0A]">Monthly Budgets</span>
               </div>
-              <ChevronRight className="h-4 w-4 text-[#707070]" />
+              <ChevronRight className="h-4 w-4 text-[#6B6B6B] group-hover:translate-x-0.5 transition-transform" />
             </Link>
 
             <Link
               href="/settings/categories"
-              className="w-full flex items-center justify-between p-4 hover:bg-[#F7F7F7] transition-all"
+              className="w-full flex items-center justify-between p-4 hover:bg-[#F5F5F5] transition-all group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#F7F7F7] text-[#111111] border border-[#EAEAEA] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-[#F5F5F5] text-[#0A0A0A] border border-[#E8E8E8] flex items-center justify-center shrink-0">
                   <FolderOpen className="h-4 w-4" />
                 </div>
-                <span className="text-sm font-bold text-[#111111]">Manage Categories</span>
+                <span className="text-xs font-semibold text-[#0A0A0A]">Manage Categories</span>
               </div>
-              <ChevronRight className="h-4 w-4 text-[#707070]" />
+              <ChevronRight className="h-4 w-4 text-[#6B6B6B] group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
         </div>
 
-        {/* Data & Backups */}
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-bold text-[#707070] uppercase tracking-wider pl-1">Data & System</span>
-          <div className="bg-white border border-[#EAEAEA] rounded-2xl overflow-hidden shadow-sm">
+        {/* Data & System Group */}
+        <div className="space-y-2">
+          <span className="text-[9px] font-bold text-[#6B6B6B] uppercase tracking-widest pl-1">Data & Backups</span>
+          <div className="bg-white border border-[#E8E8E8] rounded-3xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
             <Link
               href="/settings/backups"
-              className="w-full flex items-center justify-between p-4 hover:bg-[#F7F7F7] transition-all"
+              className="w-full flex items-center justify-between p-4 hover:bg-[#F5F5F5] transition-all group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#F7F7F7] text-[#111111] border border-[#EAEAEA] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-[#F5F5F5] text-[#0A0A0A] border border-[#E8E8E8] flex items-center justify-center shrink-0">
                   <Database className="h-4 w-4" />
                 </div>
-                <span className="text-sm font-bold text-[#111111]">Backups & Statements</span>
+                <span className="text-xs font-semibold text-[#0A0A0A]">Export Statements & Data</span>
               </div>
-              <ChevronRight className="h-4 w-4 text-[#707070]" />
+              <ChevronRight className="h-4 w-4 text-[#6B6B6B] group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Sign out */}
-      <button
+      {/* Sign out button */}
+      <motion.button
+        whileTap={{ scale: 0.98 }}
         onClick={handleSignOut}
-        className="w-full py-3.5 bg-red-50 border border-red-100 hover:bg-red-100/50 rounded-2xl font-bold text-sm text-red-500 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+        className="w-full py-4 bg-white border border-[#E8E8E8] hover:bg-red-50 hover:text-red-500 hover:border-red-100 rounded-3xl font-semibold text-xs text-[#0A0A0A] flex items-center justify-center gap-2 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all"
       >
-        <LogOut className="h-4.5 w-4.5 text-red-500" />
+        <LogOut className="h-4 w-4" />
         Sign Out Account
-      </button>
+      </motion.button>
     </div>
   );
 }

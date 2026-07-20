@@ -43,7 +43,7 @@ interface ReportChartsProps {
 }
 
 export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProps) {
-  // Grayscale colors for category Doughnut slice allocation
+  // Ultra-premium monochrome gray scale
   const doughnutData = {
     labels: categoryBreakdown.map((c) => c.name),
     datasets: [
@@ -51,19 +51,20 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
         data: categoryBreakdown.map((c) => c.amount / 100),
         backgroundColor: categoryBreakdown.map((_, i) => {
           const monochromePalette = [
-            '#111111', // Solid Black
-            '#2F2F2F', // Dark Gray
-            '#4F4F4F', // Medium Dark Gray
-            '#6F6F6F', // Gray
-            '#8F8F8F', // Medium Gray
-            '#AFAFAF', // Medium Light Gray
-            '#CFCFCF', // Light Gray
-            '#EAEAEA', // Very Light Gray
+            '#0A0A0A', // True Black
+            '#262626', // Near Black
+            '#404040', // Deep Gray
+            '#525252', 
+            '#737373', 
+            '#A3A3A3', // Muted Gray
+            '#D4D4D4', // Light Gray
+            '#E5E5E5', // Very Light Gray
           ];
           return monochromePalette[i % monochromePalette.length];
         }),
         borderColor: '#FFFFFF',
-        borderWidth: 2,
+        borderWidth: 3,
+        hoverOffset: 4,
       },
     ],
   };
@@ -71,50 +72,56 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
   const doughnutOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    cutout: '80%', // Thin elegant ring
     plugins: {
       legend: {
-        position: 'right' as const,
+        position: 'bottom' as const,
         labels: {
-          color: '#111111',
+          color: '#404040',
           font: {
-            size: 11,
-            weight: 'bold' as const,
+            size: 10,
+            family: 'var(--font-sans)',
+            weight: 500,
           },
-          padding: 12,
-          boxWidth: 10,
-          boxHeight: 10,
+          padding: 16,
+          boxWidth: 8,
+          boxHeight: 8,
+          usePointStyle: true,
         },
       },
       tooltip: {
-        backgroundColor: '#111111',
-        titleColor: '#FFFFFF',
-        bodyColor: '#FFFFFF',
+        backgroundColor: '#0A0A0A',
+        titleFont: { family: 'var(--font-sans)' },
+        bodyFont: { family: 'var(--font-sans)' },
+        padding: 10,
+        cornerRadius: 12,
         callbacks: {
           label: (context: any) => {
             const val = context.raw as number;
-            return ` ₹${val.toFixed(2)}`;
+            return ` ₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
           },
         },
       },
     },
   };
 
-  // Spending Trend line configuration
+  // Line trend chart data
   const trendData = {
     labels: dailyTrend.map((d) => d.label),
     datasets: [
       {
-        label: 'Daily Spending',
+        label: 'Spending',
         data: dailyTrend.map((d) => d.amount / 100),
-        borderColor: '#111111',
-        backgroundColor: 'rgba(17, 17, 17, 0.04)',
+        borderColor: '#0A0A0A',
+        borderWidth: 2,
+        backgroundColor: 'rgba(10, 10, 10, 0.03)',
         fill: true,
-        tension: 0.25,
-        pointRadius: dailyTrend.length > 15 ? 0 : 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: '#111111',
-        pointBorderColor: '#FFFFFF',
-        pointBorderWidth: 1.5,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#0A0A0A',
+        pointHoverBorderColor: '#FFFFFF',
+        pointHoverBorderWidth: 2,
       },
     ],
   };
@@ -127,13 +134,15 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
         display: false,
       },
       tooltip: {
-        backgroundColor: '#111111',
-        titleColor: '#FFFFFF',
-        bodyColor: '#FFFFFF',
+        backgroundColor: '#0A0A0A',
+        titleFont: { family: 'var(--font-sans)' },
+        bodyFont: { family: 'var(--font-sans)' },
+        padding: 10,
+        cornerRadius: 12,
         callbacks: {
           label: (context: any) => {
             const val = context.raw as number;
-            return ` Spending: ₹${val.toFixed(2)}`;
+            return ` ₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
           },
         },
       },
@@ -144,23 +153,28 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
           display: false,
         },
         ticks: {
-          color: '#707070',
+          color: '#6B6B6B',
           font: {
-            size: 10,
+            size: 9,
+            family: 'var(--font-sans)',
+            weight: 500,
           },
         },
       },
       y: {
         grid: {
-          color: '#EAEAEA',
+          color: '#E8E8E8',
+          drawTicks: false,
         },
         border: {
           dash: [4, 4],
         },
         ticks: {
-          color: '#707070',
+          color: '#6B6B6B',
           font: {
-            size: 10,
+            size: 9,
+            family: 'var(--font-sans)',
+            weight: 500,
           },
           callback: (value: any) => `₹${value}`,
         },
@@ -168,23 +182,24 @@ export function ReportCharts({ categoryBreakdown, dailyTrend }: ReportChartsProp
     },
   };
 
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
-      {/* Category allocations chart */}
-      <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm flex flex-col h-[300px]">
-        <h3 className="text-xs font-bold text-[#111111] uppercase tracking-wider mb-4">
-          Category Allocation
-        </h3>
+      {/* Category breakdown (Donut ring) */}
+      <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col h-[320px]">
+        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-4">
+          Breakdown
+        </span>
         <div className="flex-1 relative min-h-0">
           <Doughnut data={doughnutData} options={doughnutOptions} />
         </div>
       </div>
 
-      {/* Spending Trend line chart */}
-      <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm flex flex-col h-[300px]">
-        <h3 className="text-xs font-bold text-[#111111] uppercase tracking-wider mb-4">
-          Spending Trend
-        </h3>
+      {/* Spending Trend (Minimal curve) */}
+      <div className="bg-white border border-[#E8E8E8] rounded-3xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] flex flex-col h-[320px]">
+        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider mb-4">
+          Spending Curve
+        </span>
         <div className="flex-1 relative min-h-0">
           <Line data={trendData} options={trendOptions} />
         </div>

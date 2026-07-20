@@ -8,10 +8,13 @@ import { formatAmount } from '@/utils/currency';
 import { CategoryIcon } from '@/components/ui/CategoryIcon';
 import { CategoryDialog } from '@/components/categories/CategoryDialog';
 import { CategoryDeleteDialog } from '@/components/categories/CategoryDeleteDialog';
-import { Plus, Edit3, Trash2, Loader2, AlertTriangle, ChevronLeft } from 'lucide-react';
+import { Plus, Edit3, Trash2, ChevronLeft } from 'lucide-react';
+import { SkeletonList } from '@/components/ui/SkeletonCard';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { motion } from 'framer-motion';
 
 export default function CategoriesSettingsPage() {
-  const { data: categories, isLoading, isError, error } = useCategories();
+  const { data: categories, isLoading, isError, error, refetch } = useCategories();
 
   // Modals States
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -34,21 +37,15 @@ export default function CategoriesSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-[#707070] gap-3 select-none">
-        <Loader2 className="h-8 w-8 animate-spin text-black" />
-        <span className="text-sm font-semibold">Loading categories...</span>
+      <div className="space-y-6 pb-12 select-none max-w-md mx-auto">
+        <div className="h-6 w-36 rounded animate-shimmer" />
+        <SkeletonList count={4} type="list-item" />
       </div>
     );
   }
 
   if (isError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-6 bg-[#F7F7F7] border border-[#EAEAEA] rounded-2xl max-w-md mx-auto text-center select-none">
-        <AlertTriangle className="h-10 w-10 text-red-500 animate-bounce" />
-        <h3 className="text-base font-bold text-[#111111]">Failed to load categories</h3>
-        <p className="text-xs text-[#707070]">{error?.message || 'Unexpected database error'}</p>
-      </div>
-    );
+    return <ErrorState onRetry={refetch} message={error?.message} />;
   }
 
   return (
@@ -56,91 +53,107 @@ export default function CategoriesSettingsPage() {
       {/* Back Header */}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Link href="/settings" className="p-2 -ml-2 text-[#707070] hover:text-[#111111] transition-all">
+          <Link href="/settings" className="p-2 -ml-2 text-[#6B6B6B] hover:text-[#0A0A0A] transition-all">
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-xl font-bold text-[#111111]">Categories</h1>
+          <h1 className="text-base font-semibold text-[#0A0A0A]">Categories</h1>
         </div>
-        <button
+        <motion.button
+          whileTap={{ scale: 0.97 }}
           onClick={handleCreate}
-          className="px-3.5 py-2 bg-black hover:bg-black/90 transition-all rounded-lg font-semibold text-xs text-white flex items-center gap-1.5 active:scale-[0.98]"
+          className="px-3.5 py-2.5 bg-[#0A0A0A] hover:bg-[#1C1C1C] transition-all rounded-xl font-semibold text-xs text-white flex items-center gap-1.5 active:scale-[0.98]"
         >
-          <Plus className="h-4 w-4 text-white" />
-          Create
-        </button>
+          <Plus className="h-4 w-4" />
+          Add Category
+        </motion.button>
       </div>
 
       {/* Grid listing */}
-      <div className="grid grid-cols-1 gap-3">
+      <motion.div
+        variants={{
+          show: {
+            transition: {
+              staggerChildren: 0.04,
+            },
+          },
+        }}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 gap-3"
+      >
         {categories?.map((cat: any) => {
           const colorSet = getCategoryColorClasses(cat.color);
 
           return (
-            <div
+            <motion.div
               key={cat.id}
-              className="bg-white border border-[#EAEAEA] rounded-2xl p-4 shadow-sm flex items-center justify-between transition-all"
+              variants={{
+                hidden: { opacity: 0, y: 10 },
+                show: { opacity: 1, y: 0 },
+              }}
+              whileHover={{ y: -1, shadow: '0 4px 12px rgba(0,0,0,0.02)' }}
+              className="bg-white border border-[#E8E8E8] rounded-2xl p-4 flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.01)] transition-all overflow-hidden relative group"
             >
               {/* Left Group Info */}
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 ${colorSet.fill}`}>
-                  <CategoryIcon name={cat.icon} size={16} />
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 ${colorSet.fill}`}>
+                  <CategoryIcon name={cat.icon} size={15} />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-[#111111] leading-tight truncate">
+                  <span className="text-xs font-semibold text-[#0A0A0A] leading-tight truncate">
                     {cat.name}
                   </span>
-                  <div className="flex items-center gap-1.5 mt-1">
+                  <div className="flex items-center gap-1.5 mt-1 text-[9px] text-[#6B6B6B] font-medium leading-none">
                     {cat.isSystem ? (
-                      <span className="text-[8px] font-black uppercase text-[#707070] bg-[#F7F7F7] border border-[#EAEAEA] px-1 py-0.5 rounded">
+                      <span className="text-[8px] font-bold uppercase text-[#6B6B6B] bg-[#F5F5F5] border border-[#E8E8E8] px-1 py-0.5 rounded">
                         System
                       </span>
                     ) : (
-                      <span className="text-[8px] font-black uppercase text-[#888888] bg-[#F7F7F7] border border-[#EAEAEA] px-1 py-0.5 rounded">
+                      <span className="text-[8px] font-bold uppercase text-neutral-400 bg-[#F5F5F5] border border-[#E8E8E8] px-1 py-0.5 rounded">
                         Custom
                       </span>
                     )}
-                    <span className="text-[9px] text-[#707070] font-semibold">
-                      • {cat.expenseCount || 0} txn{cat.expenseCount === 1 ? '' : 's'}
-                    </span>
+                    <span>•</span>
+                    <span>{cat.expenseCount || 0} txn{cat.expenseCount === 1 ? '' : 's'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Right Group Actions & Lifetime Total */}
-              <div className="flex items-center gap-3 shrink-0">
-                {/* Total Stats */}
-                <div className="flex flex-col items-end">
-                  <span className="text-xs font-black text-[#111111] leading-none">
+              <div className="flex items-center gap-3 shrink-0 relative pr-1">
+                <div className="flex flex-col items-end group-hover:opacity-0 transition-opacity duration-150">
+                  <span className="text-xs font-bold text-[#0A0A0A] leading-none">
                     ₹{formatAmount(cat.totalSpent || 0)}
                   </span>
-                  <span className="text-[8px] text-[#707070] uppercase font-bold tracking-wider mt-1">
+                  <span className="text-[8px] text-[#6B6B6B] uppercase font-bold tracking-wider mt-1 leading-none">
                     Lifetime
                   </span>
                 </div>
 
-                <div className="flex items-center gap-0.5 border-l border-[#EAEAEA] pl-2">
+                {/* Sliding Actions on Hover */}
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto flex items-center gap-1 transition-opacity duration-150 bg-white pl-2">
                   <button
                     onClick={() => handleEdit(cat)}
-                    className="p-1.5 text-[#707070] hover:text-black rounded-lg hover:bg-[#F7F7F7] transition-all"
-                    title="Edit Category"
+                    className="p-1.5 text-[#6B6B6B] hover:text-[#0A0A0A] hover:bg-[#F5F5F5] rounded-lg transition-all"
+                    title="Edit"
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
                   {!cat.isSystem && (
                     <button
                       onClick={() => handleDelete(cat)}
-                      className="p-1.5 text-[#707070] hover:text-red-500 rounded-lg hover:bg-red-50 transition-all"
-                      title="Delete Category"
+                      className="p-1.5 text-[#6B6B6B] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
 
       {/* Dialog Modals */}
       <CategoryDialog

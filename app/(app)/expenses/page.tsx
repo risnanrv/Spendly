@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { expenseSchema, type ExpenseInput } from '@/utils/validation';
@@ -8,22 +8,21 @@ import { useExpenses, useCreateExpense, useDeleteExpense } from '@/hooks/useExpe
 import { useCategories } from '@/hooks/useCategories';
 import { getMonthStr, getMonthName } from '@/utils/date';
 import { formatAmount } from '@/utils/currency';
-import { getCategoryColorClasses } from '@/utils/colors';
 import { CategoryIcon } from '@/components/ui/CategoryIcon';
 import { ExpenseCard } from '@/components/ExpenseCard';
 import { ExpenseDialog } from '@/components/expenses/ExpenseDialog';
 import { DeleteConfirmDialog } from '@/components/expenses/DeleteConfirmDialog';
+import { SkeletonList, SkeletonCard } from '@/components/ui/SkeletonCard';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   ChevronDown,
-  Trash2,
-  Edit3,
-  Plus,
-  Loader2,
   Calendar,
-  AlertTriangle,
-  FolderMinus,
   ArrowUpDown,
+  SlidersHorizontal,
+  ChevronUp,
 } from 'lucide-react';
 
 export default function ExpensesPage() {
@@ -40,22 +39,28 @@ export default function ExpensesPage() {
   const [sortField, setSortField] = useState<'date' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Form State
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [displayAmount, setDisplayAmount] = useState('');
+  const amountInputRef = useRef<HTMLInputElement>(null);
+
   // Modal State for EDITING
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [expenseToEdit, setExpenseToEdit] = useState<any | null>(null);
   const [expenseToDeleteId, setExpenseToDeleteId] = useState<string | null>(null);
 
-  // Fetch expenses using Server Action hook
-  const { data: expensesList, isLoading, isError, error } = useExpenses({
+  // Fetch expenses
+  const { data: expensesList, isLoading, isError, error, refetch } = useExpenses({
     monthStr,
     categoryId: categoryId || undefined,
     search: search || undefined,
   });
 
-  // Query ALL expenses to calculate recency of categories
+  // Query ALL expenses for sorting categories by recency/frequency
   const { data: allExpenses } = useExpenses();
 
-  // Calculate sorted categories using: Most Used -> Recently Used -> Others
+  // Calculate sorted categories: Most Used -> Recently Used -> Others
   const sortedCategories = useMemo(() => {
     if (!categories) return [];
     
@@ -77,31 +82,25 @@ export default function ExpensesPage() {
       const countA = counts[a.id] || 0;
       const countB = counts[b.id] || 0;
 
-      // 1. Most Used
-      if (countA !== countB) {
-        return countB - countA;
-      }
+      if (countA !== countB) return countB - countA;
 
-      // 2. Recently Used (if they have been used at least once)
       if (countA > 0) {
         const timeA = recency[a.id] || 0;
         const timeB = recency[b.id] || 0;
-        if (timeA !== timeB) {
-          return timeB - timeA;
-        }
+        if (timeA !== timeB) return timeB - timeA;
       }
 
-      // 3. Others (Alphabetical)
       return a.name.localeCompare(b.name);
     });
   }, [categories, allExpenses]);
 
-  // Form for INLINE ADD
+  // Form setup
   const {
     register,
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors: formErrors, isSubmitting: formSubmitting },
   } = useForm<ExpenseInput>({
     resolver: zodResolver(expenseSchema),
@@ -114,12 +113,44 @@ export default function ExpensesPage() {
     },
   });
 
-  // Set default category when categories list loads
+  const selectedCategoryId = watch('categoryId');
+
+  // Set default category when list loads
   useEffect(() => {
-    if (sortedCategories.length > 0) {
+    if (sortedCategories.length > 0 && !selectedCategoryId) {
       setValue('categoryId', sortedCategories[0].id);
     }
-  }, [sortedCategories, setValue]);
+  }, [sortedCategories, setValue, selectedCategoryId]);
+
+  // Auto-focus amount input on mount
+  useEffect(() => {
+    if (amountInputRef.current) {
+      amountInputRef.current.focus();
+    }
+  }, []);
+
+  // Format helper for amount entry (CashApp / Revolut style)
+  const formatAmountInput = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (!digits) return '';
+    const cents = parseInt(digits, 10);
+    const rupees = cents / 100;
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+    }).format(rupees);
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const formatted = formatAmountInput(rawVal);
+    setDisplayAmount(formatted);
+
+    const digits = rawVal.replace(/\D/g, '');
+    const numericVal = digits ? parseInt(digits, 10) / 100 : 0;
+    setValue('amount', numericVal, { shouldValidate: true });
+  };
 
   const onAddExpense = async (data: ExpenseInput) => {
     const amountCents = Math.round(data.amount * 100);
@@ -131,6 +162,8 @@ export default function ExpensesPage() {
         dateStr: data.dateStr,
         note: data.note || undefined,
       });
+      
+      // Reset form on success
       reset({
         title: '',
         amount: undefined,
@@ -138,8 +171,14 @@ export default function ExpensesPage() {
         dateStr: new Date().toISOString().split('T')[0],
         note: '',
       });
+      setDisplayAmount('');
+      setShowAdvanced(false);
+      setCategorySearch('');
+      if (amountInputRef.current) {
+        amountInputRef.current.focus();
+      }
     } catch {
-      // Errors handled inside mutation hook
+      // Handled inside hook
     }
   };
 
@@ -169,7 +208,14 @@ export default function ExpensesPage() {
     }
   };
 
-  // Sort expenses client-side
+  // Filter categories shown in chips
+  const filteredChipsCategories = useMemo(() => {
+    return sortedCategories.filter(cat =>
+      cat.name.toLowerCase().includes(categorySearch.toLowerCase())
+    );
+  }, [sortedCategories, categorySearch]);
+
+  // Client-side sort
   const sortedExpenses = useMemo(() => {
     if (!expensesList) return [];
     return [...expensesList].sort((a: any, b: any) => {
@@ -197,192 +243,246 @@ export default function ExpensesPage() {
   }, []);
 
   return (
-    <div className="space-y-6 select-none pb-12">
+    <div className="space-y-8 pb-12 select-none">
       {/* Header section */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#111111]">
+        <h1 className="text-xl font-semibold tracking-tight text-[#0A0A0A]">
           Expenses
         </h1>
-        <p className="text-xs text-[#707070] mt-1">
-          Log spending records and view history instantly.
+        <p className="text-xs text-[#6B6B6B] mt-1">
+          Add transactions and track your history instantly.
         </p>
       </div>
 
-      {/* Inline Expense Form */}
-      <div className="bg-white border border-[#EAEAEA] rounded-2xl p-5 shadow-sm space-y-4">
-        <h2 className="text-xs font-bold text-[#111111] uppercase tracking-wider">
-          Log New Expense
-        </h2>
-        <form onSubmit={handleSubmit(onAddExpense)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Title */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#707070] uppercase">Title</label>
+      {/* Log Expense Form Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white border border-[#E8E8E8] rounded-3xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-6"
+      >
+        <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider block">
+          New Entry
+        </span>
+
+        <form onSubmit={handleSubmit(onAddExpense)} className="space-y-6">
+          {/* Amount input: HERO Element */}
+          <div className="flex flex-col items-center justify-center py-2 space-y-1">
+            <div className="relative w-full max-w-xs flex items-center justify-center">
               <input
+                ref={amountInputRef}
                 type="text"
-                placeholder="e.g. Grocery"
-                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black transition-colors"
-                {...register('title')}
+                placeholder="₹0.00"
+                value={displayAmount}
+                onChange={handleAmountChange}
                 disabled={formSubmitting}
+                className="w-full text-4xl md:text-5xl font-black text-center text-[#0A0A0A] placeholder-neutral-300 focus:outline-none bg-transparent select-all"
               />
-              {formErrors.title && (
-                <p className="text-[10px] text-red-500 font-medium">{formErrors.title.message}</p>
+            </div>
+            {formErrors.amount && (
+              <p className="text-[10px] text-red-500 font-semibold">{formErrors.amount.message}</p>
+            )}
+          </div>
+
+          {/* Categories Selector Horizontal Scroll Chips */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-semibold text-[#6B6B6B] uppercase tracking-wider">
+                Category
+              </label>
+              
+              {/* Mini category search */}
+              {sortedCategories.length > 5 && (
+                <div className="relative w-36">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#6B6B6B]" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                    className="w-full pl-6 pr-2 py-1 bg-[#F5F5F5] border border-[#E8E8E8] rounded-lg text-[10px] focus:outline-none focus:border-[#0A0A0A]"
+                  />
+                </div>
               )}
             </div>
 
-            {/* Amount */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#707070] uppercase">Amount (INR)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black transition-colors"
-                {...register('amount')}
-                disabled={formSubmitting}
-              />
-              {formErrors.amount && (
-                <p className="text-[10px] text-red-500 font-medium">{formErrors.amount.message}</p>
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-thin">
+              {filteredChipsCategories.map((cat: any) => {
+                const isSelected = selectedCategoryId === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setValue('categoryId', cat.id, { shouldValidate: true })}
+                    disabled={formSubmitting}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 border transition-all flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                        : 'bg-[#F5F5F5] border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
+                    }`}
+                  >
+                    <CategoryIcon name={cat.icon} size={12} />
+                    <span>{cat.name}</span>
+                  </button>
+                );
+              })}
+              {filteredChipsCategories.length === 0 && (
+                <span className="text-[10px] text-[#6B6B6B] italic py-1">No categories match</span>
               )}
             </div>
+            {formErrors.categoryId && (
+              <p className="text-[10px] text-red-500 font-semibold">{formErrors.categoryId.message}</p>
+            )}
+          </div>
 
-            {/* Category dropdown */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#707070] uppercase">Category</label>
-              <select
-                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] focus:outline-none focus:border-black transition-colors cursor-pointer"
-                {...register('categoryId')}
-                disabled={formSubmitting}
+          {/* Form Title & Advanced Accordion Toggle */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  placeholder="What did you spend on?"
+                  className="w-full px-4 py-3 bg-[#F5F5F5] border border-[#E8E8E8] rounded-xl text-xs text-[#0A0A0A] placeholder-neutral-400 focus:outline-none focus:border-[#0A0A0A] focus:bg-white transition-all"
+                  {...register('title')}
+                  disabled={formSubmitting}
+                />
+                {formErrors.title && (
+                  <p className="text-[10px] text-red-500 font-semibold mt-1">{formErrors.title.message}</p>
+                )}
+              </div>
+
+              {/* Show more/less toggle button */}
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="p-3 bg-[#F5F5F5] hover:bg-[#E8E8E8] text-[#6B6B6B] rounded-xl transition-all"
+                title="Advanced Options"
               >
-                <option value="" disabled>Select category</option>
-                {sortedCategories.map((cat: any) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-              {formErrors.categoryId && (
-                <p className="text-[10px] text-red-500 font-medium">{formErrors.categoryId.message}</p>
-              )}
+                {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
+              </button>
             </div>
+
+            {/* Collapsible notes/date selector */}
+            <AnimatePresence initial={false}>
+              {showAdvanced && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    {/* Date */}
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-[#6B6B6B] uppercase tracking-wider">Date</label>
+                      <input
+                        type="date"
+                        className="w-full px-4 py-3 bg-[#F5F5F5] border border-[#E8E8E8] rounded-xl text-xs text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] focus:bg-white transition-all"
+                        {...register('dateStr')}
+                        disabled={formSubmitting}
+                      />
+                    </div>
+
+                    {/* Note */}
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-[#6B6B6B] uppercase tracking-wider">Note (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="Add details..."
+                        className="w-full px-4 py-3 bg-[#F5F5F5] border border-[#E8E8E8] rounded-xl text-xs text-[#0A0A0A] placeholder-neutral-400 focus:outline-none focus:border-[#0A0A0A] focus:bg-white transition-all"
+                        {...register('note')}
+                        disabled={formSubmitting}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Date */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#707070] uppercase">Date</label>
-              <input
-                type="date"
-                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] focus:outline-none focus:border-black transition-colors"
-                {...register('dateStr')}
-                disabled={formSubmitting}
-              />
-              {formErrors.dateStr && (
-                <p className="text-[10px] text-red-500 font-medium">{formErrors.dateStr.message}</p>
-              )}
-            </div>
-
-            {/* Note */}
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-bold text-[#707070] uppercase">Note (Optional)</label>
-              <input
-                type="text"
-                placeholder="Add notes..."
-                className="w-full px-3 py-2 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-xs text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black transition-colors"
-                {...register('note')}
-                disabled={formSubmitting}
-              />
-              {formErrors.note && (
-                <p className="text-[10px] text-red-500 font-medium">{formErrors.note.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <button
+          {/* Submit Action */}
+          <div className="flex justify-end pt-2">
+            <motion.button
+              whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={formSubmitting}
-              className="px-4 py-2 bg-black hover:bg-black/90 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-full py-3.5 bg-[#0A0A0A] hover:bg-[#1C1C1C] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
             >
               {formSubmitting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Saving...
-                </>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                  Logging record...
+                </span>
               ) : (
-                <>
-                  <Plus className="h-3.5 w-3.5" />
-                  Log Expense
-                </>
+                'Log Expense'
               )}
-            </button>
+            </motion.button>
           </div>
         </form>
-      </div>
+      </motion.div>
 
       {/* Divider */}
-      <div className="border-t border-[#EAEAEA] my-4" />
+      <div className="border-t border-[#E8E8E8] my-6" />
 
       {/* History section heading */}
-      <div>
-        <h2 className="text-base font-extrabold text-[#111111]">Expense History</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-[#0A0A0A]">History</h2>
       </div>
 
-      {/* Filters: Month & Search */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        {/* Month Filter */}
-        <div className="relative min-w-[200px] w-full sm:w-auto">
-          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070]" />
+      {/* Filters bar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        {/* Month Selector */}
+        <div className="relative min-w-[160px] w-full sm:w-auto">
+          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#6B6B6B]" />
           <select
             value={monthStr}
             onChange={(e) => setMonthStr(e.target.value)}
-            className="w-full pl-9 pr-8 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-sm font-bold text-[#111111] focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors appearance-none cursor-pointer"
+            className="w-full pl-9 pr-8 py-2 bg-white border border-[#E8E8E8] rounded-xl text-xs font-semibold text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] appearance-none cursor-pointer"
           >
             {monthOptions.map((opt) => (
-              <option key={opt.value} value={opt.value} className="bg-white text-black">
+              <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070] pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#6B6B6B] pointer-events-none" />
         </div>
 
-        {/* Search Bar */}
-        <div className="relative w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#707070]" />
+        {/* Search */}
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#6B6B6B]" />
           <input
             type="text"
-            placeholder="Search transactions..."
+            placeholder="Search details..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-xl text-sm text-[#111111] placeholder-text-tertiary focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors"
+            className="w-full pl-9 pr-4 py-2 bg-white border border-[#E8E8E8] rounded-xl text-xs text-[#0A0A0A] placeholder-neutral-400 focus:outline-none focus:border-[#0A0A0A]"
           />
         </div>
       </div>
 
-      {/* Category Chips (Horizontal Scrollable list) */}
-      <div className="space-y-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-[#707070]">Filter Categories</span>
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none scroll-smooth">
+      {/* Category Chips scroll list for History filter */}
+      <div className="space-y-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-2 px-2 scrollbar-thin">
           <button
             onClick={() => setCategoryId('')}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 border ${
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shrink-0 border ${
               categoryId === ''
-                ? 'bg-black border-black text-white'
-                : 'bg-[#F7F7F7] border-[#EAEAEA] text-[#707070] hover:border-black/20'
+                ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                : 'bg-white border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
             }`}
           >
-            All
+            All Categories
           </button>
           
           {categories?.map((cat: any) => (
             <button
               key={cat.id}
               onClick={() => setCategoryId(cat.id)}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 border flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shrink-0 border flex items-center gap-1 ${
                 categoryId === cat.id
-                  ? 'bg-black border-black text-white'
-                  : 'bg-[#F7F7F7] border-[#EAEAEA] text-[#707070] hover:border-black/20'
+                  ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                  : 'bg-white border-[#E8E8E8] text-[#6B6B6B] hover:border-[#A8A8A8] hover:text-[#0A0A0A]'
               }`}
             >
               <span>{cat.name}</span>
@@ -391,147 +491,57 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* History table list */}
+      {/* Transaction List */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-[#707070] gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-black" />
-          <span className="text-sm font-semibold">Loading transactions...</span>
-        </div>
+        <SkeletonList count={4} type="list-item" />
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center p-6 bg-[#F7F7F7] border border-[#EAEAEA] rounded-2xl max-w-md mx-auto text-center gap-3">
-          <AlertTriangle className="h-10 w-10 text-red-500" />
-          <h3 className="text-base font-bold text-[#111111]">Failed to load transactions</h3>
-          <p className="text-xs text-[#707070]">{error?.message || 'Unexpected database error'}</p>
-        </div>
+        <ErrorState onRetry={refetch} message={error?.message} />
       ) : sortedExpenses.length === 0 ? (
-        <div className="bg-[#F7F7F7] border border-[#EAEAEA] rounded-2xl p-10 flex flex-col items-center justify-center text-center shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-[#EAEAEA] flex items-center justify-center text-[#707070] mb-4">
-            <FolderMinus className="h-8 w-8" />
-          </div>
-          <h3 className="text-lg font-bold text-[#111111]">No records found</h3>
-          <p className="text-sm text-[#707070] max-w-sm mt-1">
-            We couldn&apos;t find any logged expenses matching those filter criteria for {getMonthName(monthStr)}.
-          </p>
-        </div>
+        <EmptyState
+          illustration="expenses"
+          title="No logged records"
+          description={`We couldn't find any transactions logged for ${getMonthName(monthStr)} matching your filters.`}
+          actionLabel="Log New Entry"
+          onAction={() => {
+            if (amountInputRef.current) {
+              amountInputRef.current.focus();
+            }
+          }}
+        />
       ) : (
-        <>
-          {/* Desktop Table View */}
-          <div className="hidden lg:block overflow-hidden bg-white border border-[#EAEAEA] rounded-2xl shadow-sm">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-[#EAEAEA] bg-[#F7F7F7]">
-                  <th className="text-left py-3 px-4 text-xs font-bold text-[#707070] uppercase tracking-wider">Category</th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-[#707070] uppercase tracking-wider">Title</th>
-                  <th
-                    onClick={() => toggleSort('date')}
-                    className="text-left py-3 px-4 text-xs font-bold text-[#707070] uppercase tracking-wider cursor-pointer hover:text-black transition-colors"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Date
-                      <ArrowUpDown className="h-3 w-3" />
-                    </div>
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-[#707070] uppercase tracking-wider">Note</th>
-                  <th
-                    onClick={() => toggleSort('amount')}
-                    className="text-right py-3 px-4 text-xs font-bold text-[#707070] uppercase tracking-wider cursor-pointer hover:text-black transition-colors"
-                  >
-                    <div className="flex items-center justify-end gap-1.5">
-                      Amount
-                      <ArrowUpDown className="h-3 w-3" />
-                    </div>
-                  </th>
-                  <th className="text-center py-3 px-4 text-xs font-bold text-[#707070] uppercase tracking-wider w-24">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#EAEAEA]">
-                {sortedExpenses.map((expense: any) => {
-                  const colorSet = getCategoryColorClasses(expense.categoryColor);
-
-                  return (
-                    <tr
-                      key={expense.id}
-                      onClick={() => handleEdit(expense)}
-                      className="hover:bg-[#F7F7F7] cursor-pointer transition-colors"
-                    >
-                      {/* Category Badge */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white ${colorSet.fill}`}>
-                            <CategoryIcon name={expense.categoryIcon} size={13} />
-                          </div>
-                          <span className="font-bold text-[#111111]">{expense.categoryName}</span>
-                        </div>
-                      </td>
-
-                      {/* Title */}
-                      <td className="py-3.5 px-4 font-bold text-[#111111] max-w-[200px] truncate">
-                        {expense.title}
-                      </td>
-
-                      {/* Date */}
-                      <td className="py-3.5 px-4 text-sm text-[#707070]">
-                        {new Date(expense.date).toLocaleDateString([], {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </td>
-
-                      {/* Note */}
-                      <td className="py-3.5 px-4 text-sm text-[#707070] max-w-[250px] truncate">
-                        {expense.note || '-'}
-                      </td>
-
-                      {/* Amount */}
-                      <td className="py-3.5 px-4 text-right font-black text-red-500">
-                        -{formatAmount(expense.amount)}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(expense);
-                            }}
-                            className="p-1.5 text-[#707070] hover:text-[#111111] rounded-lg hover:bg-[#F7F7F7] transition-all"
-                            title="Edit"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={(e) => handleDeleteClick(expense.id, e)}
-                            className="p-1.5 text-[#707070] hover:text-red-500 rounded-lg hover:bg-red-50 transition-all"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Card List View */}
-          <div className="lg:hidden space-y-2">
-            {sortedExpenses.map((expense: any) => (
+        <motion.div
+          variants={{
+            show: {
+              transition: {
+                staggerChildren: 0.04,
+              },
+            },
+          }}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 gap-2.5"
+        >
+          {sortedExpenses.map((expense: any) => (
+            <motion.div
+              key={expense.id}
+              variants={{
+                hidden: { opacity: 0, y: 8 },
+                show: { opacity: 1, y: 0 },
+              }}
+            >
               <ExpenseCard
-                key={expense.id}
                 title={expense.title}
                 note={expense.note}
                 amount={expense.amount}
                 categoryId={expense.categoryId}
                 date={new Date(expense.date)}
                 onClick={() => handleEdit(expense)}
+                onEdit={() => handleEdit(expense)}
+                onDelete={() => handleDeleteClick(expense.id)}
               />
-            ))}
-          </div>
-        </>
+            </motion.div>
+          ))}
+        </motion.div>
       )}
 
       {/* Edit Dialog Modal Container */}
