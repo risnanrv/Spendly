@@ -129,7 +129,7 @@ export class BackupService {
     if (!userId) {
       throw new Error('User ID is required.');
     }
-    logger.info(`BackupService: Committing Firestore restore writes transaction for user ${userId}...`);
+    logger.info(`BackupService: Committing Firestore merge writes transaction for user ${userId}...`);
 
     try {
       if (!backup || backup.app !== 'Spendly') {
@@ -147,20 +147,31 @@ export class BackupService {
         throw new Error('Invalid schema definition elements in data blocks.');
       }
 
-      // Step 1: Query and delete all existing user data in Firestore
-      const [expensesSnap, categoriesSnap, budgetsSnap] = await Promise.all([
+      // Step 1: Query existing user data in Firestore for merging
+      const [expensesSnap, categoriesSnap, budgetsSnap, settingsSnap] = await Promise.all([
         getDocs(query(collection(db, 'expenses'), where('userId', '==', userId))),
         getDocs(query(collection(db, 'categories'), where('userId', '==', userId))),
         getDocs(query(collection(db, 'budgets'), where('userId', '==', userId))),
+        getDoc(doc(db, 'settings', userId)),
       ]);
 
-      const deleteBatch = writeBatch(db);
-      expensesSnap.forEach((d) => deleteBatch.delete(d.ref));
-      categoriesSnap.forEach((d) => deleteBatch.delete(d.ref));
-      budgetsSnap.forEach((d) => deleteBatch.delete(d.ref));
-      await deleteBatch.commit();
+      const existingExpenseIds = new Set<string>();
+      expensesSnap.forEach((d) => existingExpenseIds.add(d.id));
 
-      // Step 2: Insert restored data in batches of 500 to avoid Firestore limits
+      const existingBudgetIds = new Set<string>();
+      budgetsSnap.forEach((d) => existingBudgetIds.add(d.id));
+
+      const nameToExistingCatId = new Map<string, string>(); // lowercase name -> category id
+      const existingCatIds = new Set<string>();
+      categoriesSnap.forEach((d) => {
+        const catData = d.data();
+        if (!catData.deletedAt) {
+          nameToExistingCatId.set(catData.name.toLowerCase().trim(), d.id);
+        }
+        existingCatIds.add(d.id);
+      });
+
+      // Step 2: Insert restored data in batches of 400 to avoid Firestore limits
       const now = new Date();
       let writeBatchInstance = writeBatch(db);
       let opCount = 0;
@@ -173,34 +184,63 @@ export class BackupService {
         }
       };
 
-      // Restore Categories
-      for (const c of categories) {
-        const docRef = doc(db, 'categories', c.id);
-        writeBatchInstance.set(docRef, {
-          id: c.id,
-          userId,
-          name: c.name,
-          icon: c.icon,
-          color: c.color,
-          type: c.type || 'expense',
-          isSystem: Boolean(c.isSystem),
-          createdAt: c.createdAt ? Timestamp.fromDate(new Date(c.createdAt)) : Timestamp.fromDate(now),
-          updatedAt: c.updatedAt ? Timestamp.fromDate(new Date(c.updatedAt)) : Timestamp.fromDate(now),
-          deletedAt: c.deletedAt ? Timestamp.fromDate(new Date(c.deletedAt)) : null,
-        });
+      const categoryIdMap = new Map<string, string>(); // backup category id -> actual category id
 
-        opCount++;
-        if (opCount >= 400) await commitAndResetBatch();
+      // Merge Categories
+      for (const c of categories) {
+        const cleanedName = c.name.trim();
+        const lowerName = cleanedName.toLowerCase();
+
+        if (nameToExistingCatId.has(lowerName)) {
+          // Reuse existing category
+          categoryIdMap.set(c.id, nameToExistingCatId.get(lowerName)!);
+        } else {
+          // If ID already exists but name is different, generate new ID
+          let targetId = c.id;
+          if (existingCatIds.has(c.id)) {
+            targetId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+              const r = (Math.random() * 16) | 0;
+              const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+              return v.toString(16);
+            });
+          }
+
+          const docRef = doc(db, 'categories', targetId);
+          writeBatchInstance.set(docRef, {
+            id: targetId,
+            userId,
+            name: cleanedName,
+            icon: c.icon,
+            color: c.color,
+            type: c.type || 'expense',
+            isSystem: Boolean(c.isSystem),
+            createdAt: c.createdAt ? Timestamp.fromDate(new Date(c.createdAt)) : Timestamp.fromDate(now),
+            updatedAt: c.updatedAt ? Timestamp.fromDate(new Date(c.updatedAt)) : Timestamp.fromDate(now),
+            deletedAt: c.deletedAt ? Timestamp.fromDate(new Date(c.deletedAt)) : null,
+          });
+
+          opCount++;
+          if (opCount >= 400) await commitAndResetBatch();
+
+          categoryIdMap.set(c.id, targetId);
+          nameToExistingCatId.set(lowerName, targetId);
+          existingCatIds.add(targetId);
+        }
       }
 
-      // Restore Expenses
+      // Merge Expenses
       for (const e of expenses) {
+        if (existingExpenseIds.has(e.id)) {
+          continue; // Skip existing expense
+        }
+
+        const actualCategoryId = categoryIdMap.get(e.categoryId) || e.categoryId;
         const docRef = doc(db, 'expenses', e.id);
         writeBatchInstance.set(docRef, {
           id: e.id,
           userId,
           amount: e.amount,
-          categoryId: e.categoryId,
+          categoryId: actualCategoryId,
           title: e.title,
           note: e.note || null,
           date: e.date ? Timestamp.fromDate(new Date(e.date)) : Timestamp.fromDate(now),
@@ -213,11 +253,16 @@ export class BackupService {
         if (opCount >= 400) await commitAndResetBatch();
       }
 
-      // Restore Budgets
+      // Merge Budgets
       for (const b of budgets) {
-        const docRef = doc(db, 'budgets', b.id || `${userId}_${b.month}`);
+        const budgetId = b.id || `${userId}_${b.month}`;
+        if (existingBudgetIds.has(budgetId)) {
+          continue; // Skip existing budget
+        }
+
+        const docRef = doc(db, 'budgets', budgetId);
         writeBatchInstance.set(docRef, {
-          id: b.id || `${userId}_${b.month}`,
+          id: budgetId,
           userId,
           month: b.month,
           amount: b.amount,
@@ -230,12 +275,15 @@ export class BackupService {
         if (opCount >= 400) await commitAndResetBatch();
       }
 
-      // Commit any remaining document inserts
+      // Commit remaining batch writes
       await commitAndResetBatch();
 
-      // Restore Settings & Preferences into the unified settings doc
+      // Merge Settings & Preferences (Merge safely without deletion)
       const settingsDocRef = doc(db, 'settings', userId);
+      const existingSettings = settingsSnap.exists() ? settingsSnap.data() : {};
+
       const restoredSettings: Record<string, any> = {
+        ...existingSettings,
         userId,
         updatedAt: Timestamp.fromDate(now),
       };
@@ -253,11 +301,11 @@ export class BackupService {
 
       await setDoc(settingsDocRef, restoredSettings);
 
-      logger.info(`BackupService: Firestore data restored successfully for user ${userId}.`);
+      logger.info(`BackupService: Firestore data merged successfully for user ${userId}.`);
       return true;
     } catch (err: any) {
-      logger.error(`BackupService: Restore backup failed for user ${userId}:`, err);
-      throw new Error(`Data restoration failed: ${err.message || err}`);
+      logger.error(`BackupService: Merge backup failed for user ${userId}:`, err);
+      throw new Error(`Data merge failed: ${err.message || err}`);
     }
   }
 }

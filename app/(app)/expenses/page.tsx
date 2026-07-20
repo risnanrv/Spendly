@@ -272,7 +272,7 @@ export default function ExpensesPage() {
               
               {/* Mini category search */}
               {sortedCategories.length > 5 && (
-                <div className="relative w-36">
+                <div className="relative w-36 hidden sm:block">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#6B6B6B]" />
                   <input
                     type="text"

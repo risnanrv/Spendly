@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, db } from '@/firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { mapAuthError } from '@/utils/auth-errors';
 
 export interface UserSession {
   user: {
@@ -90,7 +91,7 @@ export const authClient = {
         const credential = await signInWithEmailAndPassword(auth, email, password);
         return { data: { user: credential.user }, error: null };
       } catch (error: any) {
-        return { data: null, error: { message: error.message || 'Invalid email or password.' } };
+        return { data: null, error: { message: mapAuthError(error) } };
       }
     },
     google: async () => {
@@ -114,7 +115,7 @@ export const authClient = {
 
         return { data: { user: fbUser }, error: null };
       } catch (error: any) {
-        return { data: null, error: { message: error.message || 'Google authentication failed.' } };
+        return { data: null, error: { message: mapAuthError(error) } };
       }
     },
   },
@@ -141,7 +142,7 @@ export const authClient = {
 
         return { data: { user: fbUser }, error: null };
       } catch (error: any) {
-        return { data: null, error: { message: error.message || 'Account registration failed.' } };
+        return { data: null, error: { message: mapAuthError(error) } };
       }
     },
   },
@@ -178,7 +179,21 @@ export const authClient = {
       await updatePassword(currentUser, newPassword);
       return { error: null };
     } catch (error: any) {
-      return { error: { message: error.message || 'Password update failed.' } };
+      return { error: { message: mapAuthError(error) } };
+    }
+  },
+
+  reauthenticate: async (password: string) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser || !currentUser.email) {
+        throw new Error('User session not found.');
+      }
+      const credential = EmailAuthProvider.credential(currentUser.email, password);
+      await reauthenticateWithCredential(currentUser, credential);
+      return { error: null };
+    } catch (error: any) {
+      return { error: { message: mapAuthError(error) } };
     }
   },
 };

@@ -96,9 +96,7 @@ export class CategoryService {
         throw new Error(`A category named "${cleanedName}" already exists.`);
       }
 
-      if (category.isSystem && category.name !== cleanedName) {
-        throw new Error('System category names are protected and cannot be changed.');
-      }
+
 
       updates.name = cleanedName;
     }
@@ -124,8 +122,10 @@ export class CategoryService {
     if (!category) {
       throw new Error('Category not found.');
     }
-    if (category.isSystem) {
-      throw new Error('System categories are protected and cannot be deleted.');
+    const allCategories = await this.categoryRepo.getCategories(userId);
+    const activeCategories = allCategories.filter((c) => !c.deletedAt);
+    if (activeCategories.length <= 1) {
+      throw new Error('At least one category must always exist. Deleting the last remaining category is not allowed.');
     }
 
     const activeExpenses = await this.expenseRepo.getExpenses(userId, { categoryId: id, limit: 10 });

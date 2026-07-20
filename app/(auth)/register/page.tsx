@@ -45,7 +45,8 @@ export default function RegisterPage() {
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred. Please try again.');
+      const { mapAuthError } = require('@/utils/auth-errors');
+      setError(mapAuthError(err));
     } finally {
       setLoading(false);
     }

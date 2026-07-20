@@ -16,6 +16,11 @@ import { motion } from 'framer-motion';
 export default function CategoriesSettingsPage() {
   const { data: categories, isLoading, isError, error, refetch } = useCategories();
 
+  const sortedCategories = React.useMemo(() => {
+    if (!categories) return [];
+    return [...categories].sort((a: any, b: any) => (b.totalSpent || 0) - (a.totalSpent || 0));
+  }, [categories]);
+
   // Modals States
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [categoryToEdit, setCategoryToEdit] = useState<any | null>(null);
@@ -81,7 +86,7 @@ export default function CategoriesSettingsPage() {
         animate="show"
         className="grid grid-cols-1 gap-3"
       >
-        {categories?.map((cat: any) => {
+        {sortedCategories.map((cat: any) => {
           const colorSet = getCategoryColorClasses(cat.color);
 
           return (
@@ -104,16 +109,6 @@ export default function CategoriesSettingsPage() {
                     {cat.name}
                   </span>
                   <div className="flex items-center gap-1.5 mt-1 text-[9px] text-[#6B6B6B] font-medium leading-none">
-                    {cat.isSystem ? (
-                      <span className="text-[8px] font-bold uppercase text-[#6B6B6B] bg-[#F5F5F5] border border-[#E8E8E8] px-1 py-0.5 rounded">
-                        System
-                      </span>
-                    ) : (
-                      <span className="text-[8px] font-bold uppercase text-neutral-400 bg-[#F5F5F5] border border-[#E8E8E8] px-1 py-0.5 rounded">
-                        Custom
-                      </span>
-                    )}
-                    <span>•</span>
                     <span>{cat.expenseCount || 0} txn{cat.expenseCount === 1 ? '' : 's'}</span>
                   </div>
                 </div>
@@ -139,15 +134,13 @@ export default function CategoriesSettingsPage() {
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
-                  {!cat.isSystem && (
-                    <button
-                      onClick={() => handleDelete(cat)}
-                      className="p-1.5 text-[#6B6B6B] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleDelete(cat)}
+                    className="p-1.5 text-[#6B6B6B] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -166,7 +159,7 @@ export default function CategoriesSettingsPage() {
         isOpen={!!categoryToDelete}
         onClose={() => setCategoryToDelete(null)}
         category={categoryToDelete}
-        allCategories={categories || []}
+        allCategories={sortedCategories}
       />
     </div>
   );

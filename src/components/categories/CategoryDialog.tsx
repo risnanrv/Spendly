@@ -118,11 +118,8 @@ export function CategoryDialog({ isOpen, onClose, categoryToEdit }: CategoryDial
               placeholder="e.g. Groceries, Subscriptions"
               className="w-full px-4 py-2.5 bg-[#F7F7F7] border border-[#EAEAEA] rounded-lg text-sm text-[#111111] focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors"
               {...register('name')}
-              disabled={isSubmitting || categoryToEdit?.isSystem}
+              disabled={isSubmitting}
             />
-            {categoryToEdit?.isSystem && (
-              <p className="text-[10px] text-[#A0A0A0]">System categories are protected and cannot be renamed.</p>
-            )}
             {errors.name && (
               <p className="text-xs text-danger font-medium">{errors.name.message}</p>
             )}

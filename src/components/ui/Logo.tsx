@@ -27,7 +27,7 @@ export function Logo({
       <path
         d="M160 176 C160 115, 352 115, 352 190 C352 235, 290 248, 256 256 C210 266, 160 280, 160 336 C160 400, 352 395, 352 336"
         stroke={fg}
-        strokeWidth="58"
+        strokeWidth="76"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"

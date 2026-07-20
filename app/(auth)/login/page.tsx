@@ -37,13 +37,14 @@ export default function LoginPage() {
       });
 
       if (response?.error) {
-        setError(response.error.message || 'Invalid email or password.');
+        setError(response.error.message || 'Incorrect email or password.');
       } else {
         router.replace('/expenses');
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred. Please try again.');
+      const { mapAuthError } = require('@/utils/auth-errors');
+      setError(mapAuthError(err));
     } finally {
       setLoading(false);
     }

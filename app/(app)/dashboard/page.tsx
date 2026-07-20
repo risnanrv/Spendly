@@ -9,7 +9,7 @@ import { formatAmount } from '@/utils/currency';
 import { getMonthStr, getMonthName } from '@/utils/date';
 import { getCategoryColorClasses } from '@/utils/colors';
 import { CategoryIcon } from '@/components/ui/CategoryIcon';
-import { CategoryAllocationChart, SpendingTrendChart } from '@/components/charts/ReportCharts';
+import { CategoryAllocationChart } from '@/components/charts/ReportCharts';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -181,70 +181,6 @@ export default function DashboardPage() {
       .filter((c) => c.amount > 0)
       .sort((a, b) => b.amount - a.amount);
   }, [categories, filteredExpenses, totalSpent]);
-
-  // Daily Trend calculation
-  const dailyTrend = useMemo(() => {
-    const trendMap = new Map<string, number>();
-
-    if (preset === 'today') {
-      const label = new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
-      return [{ label, amount: totalSpent }];
-    }
-
-    if (preset === 'week') {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const startDay = (selectedWeek - 1) * 7 + 1;
-      const endDay = selectedWeek === 4 
-        ? new Date(year, month + 1, 0).getDate() 
-        : selectedWeek * 7;
-
-      for (let d = startDay; d <= endDay; d++) {
-        trendMap.set(String(d), 0);
-      }
-
-      filteredExpenses.forEach((exp: any) => {
-        const day = new Date(exp.date).getDate();
-        const label = String(day);
-        if (trendMap.has(label)) {
-          trendMap.set(label, (trendMap.get(label) || 0) + exp.amount);
-        }
-      });
-    } else if (preset === 'month') {
-      const now = new Date();
-      const daysInMonth = new Date(now.getFullYear(), selectedMonthIdx + 1, 0).getDate();
-      for (let d = 1; d <= daysInMonth; d++) {
-        trendMap.set(String(d), 0);
-      }
-
-      filteredExpenses.forEach((exp: any) => {
-        const day = new Date(exp.date).getDate();
-        const label = String(day);
-        trendMap.set(label, (trendMap.get(label) || 0) + exp.amount);
-      });
-    } else if (preset === 'year') {
-      MONTH_NAMES.forEach((m) => {
-        trendMap.set(m.slice(0, 3), 0);
-      });
-
-      filteredExpenses.forEach((exp: any) => {
-        const mIdx = new Date(exp.date).getMonth();
-        const label = MONTH_NAMES[mIdx].slice(0, 3);
-        trendMap.set(label, (trendMap.get(label) || 0) + exp.amount);
-      });
-    } else {
-      filteredExpenses.forEach((exp: any) => {
-        const label = String(new Date(exp.date).getFullYear());
-        trendMap.set(label, (trendMap.get(label) || 0) + exp.amount);
-      });
-    }
-
-    return Array.from(trendMap.entries()).map(([label, amount]) => ({
-      label,
-      amount,
-    }));
-  }, [filteredExpenses, preset, selectedWeek, selectedMonthIdx, totalSpent]);
 
   // Client-side computed analytics summaries
   const summaryMetrics = useMemo(() => {
@@ -699,11 +635,6 @@ export default function DashboardPage() {
         <div className="bg-white border border-[#E8E8E8] rounded-3xl p-8 text-center text-[#6B6B6B] text-xs font-medium">
           No records logged in this period to display category allocations.
         </div>
-      )}
-
-      {/* Spending Trend */}
-      {filteredExpenses.length > 0 && (
-        <SpendingTrendChart dailyTrend={dailyTrend} />
       )}
 
       {/* Top Categories Ranking */}

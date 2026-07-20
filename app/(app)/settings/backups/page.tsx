@@ -13,7 +13,9 @@ import { backupService, exportService } from '@/lib/services';
 import { auth } from '@/firebase/config';
 import { getMonthStr } from '@/utils/date';
 import { useToastStore } from '@/stores/toast.store';
-import { DeleteConfirmDialog } from '@/components/expenses/DeleteConfirmDialog';
+import { PasswordConfirmDialog } from '@/components/ui/PasswordConfirmDialog';
+import { BulkDeleteCategoriesDialog } from '@/components/categories/BulkDeleteCategoriesDialog';
+import { useCategories } from '@/hooks/useCategories';
 import { ChevronLeft, Download, Upload, Printer, Trash2, ShieldAlert, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -22,8 +24,10 @@ export default function BackupsSettingsPage() {
   const queryClient = useQueryClient();
 
   const [confirmType, setConfirmType] = useState<
-    'expenses' | 'budgets' | 'categories' | 'reset' | 'restore' | null
+    'expenses' | 'budgets' | 'categories' | 'reset' | 'restore' | 'bulkDelete' | null
   >(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const { data: categories } = useCategories();
   const [restorePayload, setRestorePayload] = useState<any>(null);
   const [exportMonth, setExportMonth] = useState<string>('lifetime');
   const [showDanger, setShowDanger] = useState(false);
@@ -93,9 +97,9 @@ export default function BackupsSettingsPage() {
       if (queryClient) {
         queryClient.invalidateQueries();
       }
-      addToast('Data snapshot restored successfully!', 'success');
+      addToast('Backup data merged successfully!', 'success');
     } catch (err: any) {
-      addToast(err.message || 'Data restoration failed', 'danger');
+      addToast(err.message || 'Data merge failed', 'danger');
     }
     setConfirmType(null);
     setRestorePayload(null);
@@ -172,6 +176,17 @@ export default function BackupsSettingsPage() {
       // Handled in hooks
     } finally {
       setConfirmType(null);
+    }
+  };
+
+  const handlePasswordConfirmSuccess = () => {
+    if (confirmType === 'restore') {
+      handleConfirmRestore();
+    } else if (confirmType === 'bulkDelete') {
+      setIsBulkDeleteOpen(true);
+      setConfirmType(null);
+    } else {
+      handleConfirmDangerAction();
     }
   };
 
@@ -310,7 +325,14 @@ export default function BackupsSettingsPage() {
                 onClick={() => setConfirmType('categories')}
                 className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
               >
-                <span>Delete Custom Categories</span>
+                <span>Delete All Categories</span>
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setConfirmType('bulkDelete')}
+                className="w-full flex items-center justify-between p-3 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl transition-all text-left text-xs font-bold text-red-600"
+              >
+                <span>Delete Selected Categories</span>
                 <Trash2 className="h-4 w-4" />
               </button>
               <button
@@ -326,27 +348,40 @@ export default function BackupsSettingsPage() {
       </div>
 
       {/* Confirmation Dialogs */}
-      <DeleteConfirmDialog
+      <PasswordConfirmDialog
         isOpen={!!confirmType}
         onClose={() => {
           setConfirmType(null);
           setRestorePayload(null);
         }}
-        onConfirm={confirmType === 'restore' ? handleConfirmRestore : handleConfirmDangerAction}
+        onConfirm={handlePasswordConfirmSuccess}
         title={
           confirmType === 'restore'
-            ? 'Restore Database Snapshot'
+            ? 'Confirm Restore Backup'
             : confirmType === 'reset'
-              ? 'Reset Complete Database'
-              : `Delete All ${confirmType === 'expenses' ? 'Expenses' : confirmType === 'budgets' ? 'Budgets' : 'Custom Categories'}`
+              ? 'Confirm Reset Database'
+              : confirmType === 'bulkDelete'
+                ? 'Confirm Bulk Category Deletion'
+                : `Confirm Delete All ${confirmType === 'expenses' ? 'Expenses' : confirmType === 'budgets' ? 'Budgets' : 'Categories'}`
         }
         description={
           confirmType === 'restore'
-            ? 'This will wipe out all current expense lists, targets, and custom categories and restore them from the uploaded backup file. Proceed?'
+            ? 'This will merge backup expenses, categories, and budgets into your current account. Existing records will remain untouched. Please verify your password to continue.'
             : confirmType === 'reset'
-              ? 'Are you absolutely sure you want to delete all transaction details, configurations, and categories? This action is permanent!'
-              : `Are you sure you want to empty all logged ${confirmType === 'expenses' ? 'expenses' : confirmType === 'budgets' ? 'budget goals' : 'custom categories'}? This cannot be undone.`
+              ? 'This will permanently wipe all your transaction details, budgets, settings, and categories. This action is irreversible. Please verify your password to confirm.'
+              : confirmType === 'bulkDelete'
+                ? 'You are about to delete multiple selected categories. Please verify your password to continue.'
+                : `This will permanently empty all logged ${confirmType === 'expenses' ? 'expenses' : confirmType === 'budgets' ? 'budget goals' : 'categories'}. Please verify your password to continue.`
         }
+      />
+
+      <BulkDeleteCategoriesDialog
+        isOpen={isBulkDeleteOpen}
+        onClose={() => setIsBulkDeleteOpen(false)}
+        allCategories={categories || []}
+        onSuccess={() => {
+          queryClient.invalidateQueries();
+        }}
       />
     </div>
   );
