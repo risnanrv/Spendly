@@ -15,13 +15,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  webpack: (config, { isServer }) => {
-    const path = require('path');
-    if (isServer) {
-      config.resolve.alias['react$'] = path.resolve(__dirname, 'react-polyfill.js');
-    }
-    return config;
-  },
 };
 
 module.exports = withPWA(nextConfig);
