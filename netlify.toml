@@ -1,0 +1,6 @@
+[build.environment]
+  # Firebase web config values are public by design: Next.js inlines every
+  # NEXT_PUBLIC_* variable into the client bundle, and the project ID is also
+  # committed in .firebaserc for the Firebase CLI. Exclude them from secrets
+  # scanning so the build doesn't fail on intentionally public values.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_APP_ID,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,NEXT_PUBLIC_FIREBASE_PROJECT_ID,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"
